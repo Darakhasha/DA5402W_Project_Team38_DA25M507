@@ -19,7 +19,7 @@ def test_home():
 def test_predict():
     response = client.post("/predict")
 
-    assert response.status_code == 200
+    assert response.status_code == 201
 
     data = response.json()
 
