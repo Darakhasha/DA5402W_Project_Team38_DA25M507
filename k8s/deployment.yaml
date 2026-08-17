@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: taxi-api
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: taxi-api
+
+  template:
+    metadata:
+      labels:
+        app: taxi-api
+
+    spec:
+      containers:
+        - name: taxi-api
+          image: taxi-monitoring-api:latest
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - containerPort: 8000
