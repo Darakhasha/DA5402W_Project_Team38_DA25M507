@@ -33,6 +33,6 @@ def test_predict():
 
     data = response.json()
 
-    assert "predicted_demand" in data
+    assert "prediction" in data
 
-    assert 100 <= data["predicted_demand"] <= 300
+    assert 100 <= data["prediction"] <= 300
