@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 import random
+from prometheus_fastapi_instrumentator import Instrumentator
 
 app = FastAPI(
     title="Taxi Demand Prediction API",
@@ -7,6 +8,7 @@ app = FastAPI(
     version="1.0"
 )
 
+Instrumentator().instrument(app).expose(app)
 
 @app.get("/")
 def home():
