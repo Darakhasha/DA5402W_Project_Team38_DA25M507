@@ -14,12 +14,25 @@ KAFKA_TOPIC = os.getenv(
     "taxi-events",
 )
 
+_producer = None
 
 producer = KafkaProducer(
     bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
     value_serializer=lambda value: json.dumps(value).encode("utf-8"),
 )
 
+def get_producer():
+    global _producer
+    # Skip creating a real producer if running unit tests
+    if os.getenv("TESTING") == "true":
+        return None
+        
+    if _producer is None:
+        _producer = KafkaProducer(
+            bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+            value_serializer=lambda value: json.dumps(value).encode("utf-8")
+        )
+    return _producer
 
 def publish_inference(
     request_id: str,
@@ -28,6 +41,10 @@ def publish_inference(
     prediction,
 ) -> None:
 
+    producer = get_producer()
+    if producer is None:
+        return  # Bypasses execution during unit tests
+    
     event = {
         "event_type": "inference",
         "request_id": request_id,
@@ -47,6 +64,10 @@ def publish_feedback(
     actual,
 ) -> None:
 
+    producer = get_producer()
+    if producer is None:
+        return  # Bypasses execution during unit tests
+    
     event = {
         "event_type": "feedback",
         "request_id": request_id,
