@@ -20,7 +20,7 @@ spec:
           image: apache/kafka:4.3.1
 
           ports:
-            - containerPort: 9092
+            - containerPort: 9095
             - containerPort: 9093
 
           env:
@@ -71,7 +71,7 @@ spec:
 
   ports:
     - name: kafka
-      port: 9092
-      targetPort: 9092
+      port: 9095
+      targetPort: 9095
 
   type: ClusterIP
