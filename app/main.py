@@ -14,6 +14,11 @@ def home():
         "message": "Taxi Demand API is Running"
     }
 
+@app.get("/health")
+def health():
+    return {
+        "status": "healthy"
+    }
 
 @app.post("/predict")
 def predict():
