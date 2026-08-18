@@ -16,10 +16,10 @@ KAFKA_TOPIC = os.getenv(
 
 _producer = None
 
-producer = KafkaProducer(
-    bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-    value_serializer=lambda value: json.dumps(value).encode("utf-8"),
-)
+# producer = KafkaProducer(
+#     bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+#     value_serializer=lambda value: json.dumps(value).encode("utf-8"),
+# )
 
 def get_producer():
     global _producer
