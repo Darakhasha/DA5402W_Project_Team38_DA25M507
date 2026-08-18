@@ -35,10 +35,10 @@ jobs:
           script: |
             core.exportVariable('IMAGE_NAME', `ghcr.io/${context.repo.owner.toLowerCase()}/taxi-api`);  
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13.15"
+     # - name: Set up Python
+      #  uses: actions/setup-python@v5
+      #  with:
+      #    python-version: "3.13.15"
 
       #- name: Check Python
       #  run: |
