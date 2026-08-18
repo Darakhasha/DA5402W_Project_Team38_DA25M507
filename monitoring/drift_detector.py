@@ -73,7 +73,7 @@ def initialize_csv():
 
         print(
             f"Created monitoring file: "
-            f"{OUTPUT_FILE}"
+            f"{OUTPUT_FILE}", flush=True
         )
 
 
@@ -156,7 +156,7 @@ def update_actual(
 
         print(
             f"[CSV] WARNING: No inference found "
-            f"for request_id={request_id}"
+            f"for request_id={request_id}", flush=True
         )
 
         return
@@ -180,7 +180,7 @@ def update_actual(
 
     print(
         f"[CSV] Updated actual={actual} "
-        f"for request_id={request_id}"
+        f"for request_id={request_id}", flush=True
     )
 
 
@@ -202,7 +202,7 @@ def create_consumer():
                 value.decode("utf-8")
             ),
 
-        auto_offset_reset="latest",
+        auto_offset_reset= "earliest",#"latest",
 
         enable_auto_commit=True,
 
@@ -293,7 +293,7 @@ def main():
                     print(
                         "[ERROR] "
                         "Inference event has no "
-                        "request_id"
+                        "request_id" , flush=True
                     )
 
                     continue
@@ -324,7 +324,7 @@ def main():
                     print(
                         "[ERROR] "
                         "Feedback event has no "
-                        "request_id"
+                        "request_id", flush=True
                     )
 
                     continue
@@ -334,7 +334,7 @@ def main():
                     print(
                         "[ERROR] "
                         "Feedback event has no "
-                        "actual value"
+                        "actual value", flush=True
                     )
 
                     continue
@@ -352,14 +352,14 @@ def main():
 
                 print(
                     f"[WARNING] Unknown "
-                    f"event_type={event_type}"
+                    f"event_type={event_type}", flush=True
                 )
 
         except Exception as error:
 
             print(
                 "[ERROR] Failed to process "
-                f"Kafka event: {error}"
+                f"Kafka event: {error}", flush=True
             )
 
 
