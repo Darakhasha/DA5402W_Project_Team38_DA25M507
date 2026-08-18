@@ -183,7 +183,342 @@ def update_actual(
         f"for request_id={request_id}", flush=True
     )
 
+# ============================================================
+# Reference-data loading
+# ============================================================
 
+def load_reference_data():
+
+    path = Path(REFERENCE_DATA)
+
+    if not path.exists():
+
+        print(
+            f"[DRIFT] WARNING: Reference data not found: "
+            f"{REFERENCE_DATA}",
+            flush=True,
+        )
+
+        return {}
+
+    try:
+
+        with open(
+            path,
+            "r",
+            newline="",
+            encoding="utf-8",
+        ) as file:
+
+            reader = csv.DictReader(file)
+
+            data = list(reader)
+
+        print(
+            f"[DRIFT] Loaded {len(data)} reference rows "
+            f"from {REFERENCE_DATA}",
+            flush=True,
+        )
+
+        return data
+
+    except Exception as error:
+
+        print(
+            f"[DRIFT] ERROR loading reference data: "
+            f"{error}",
+            flush=True,
+        )
+
+        return {}
+
+
+def load_reference_predictions():
+
+    path = Path(REFERENCE_PREDICTIONS)
+
+    if not path.exists():
+
+        print(
+            f"[DRIFT] WARNING: Reference predictions not found: "
+            f"{REFERENCE_PREDICTIONS}",
+            flush=True,
+        )
+
+        return []
+
+    predictions = []
+
+    try:
+
+        with open(
+            path,
+            "r",
+            newline="",
+            encoding="utf-8",
+        ) as file:
+
+            reader = csv.DictReader(file)
+
+            for row in reader:
+
+                value = row.get("prediction")
+
+                if value is None:
+                    continue
+
+                try:
+                    predictions.append(float(value))
+                except ValueError:
+                    continue
+
+        print(
+            f"[DRIFT] Loaded "
+            f"{len(predictions)} reference predictions",
+            flush=True,
+        )
+
+        return predictions
+
+    except Exception as error:
+
+        print(
+            f"[DRIFT] ERROR loading reference predictions: "
+            f"{error}",
+            flush=True,
+        )
+
+        return []
+
+# ============================================================
+# PSI calculation
+# ============================================================
+
+def calculate_psi(
+    reference_values,
+    current_values,
+    bins=10,
+):
+
+    if not reference_values or not current_values:
+
+        return None
+
+    reference = [
+        float(x)
+        for x in reference_values
+    ]
+
+    current = [
+        float(x)
+        for x in current_values
+    ]
+
+    minimum = min(reference)
+    maximum = max(reference)
+
+    if minimum == maximum:
+
+        return 0.0
+
+    width = (
+        maximum - minimum
+    ) / bins
+
+    if width == 0:
+
+        return 0.0
+
+    reference_counts = [
+        0
+        for _ in range(bins)
+    ]
+
+    current_counts = [
+        0
+        for _ in range(bins)
+    ]
+
+    for value in reference:
+
+        index = int(
+            (value - minimum) / width
+        )
+
+        if index >= bins:
+            index = bins - 1
+
+        if index < 0:
+            index = 0
+
+        reference_counts[index] += 1
+
+    for value in current:
+
+        index = int(
+            (value - minimum) / width
+        )
+
+        if index >= bins:
+            index = bins - 1
+
+        if index < 0:
+            index = 0
+
+        current_counts[index] += 1
+
+    reference_total = len(reference)
+    current_total = len(current)
+
+    psi = 0.0
+
+    for i in range(bins):
+
+        reference_ratio = (
+            reference_counts[i]
+            / reference_total
+        )
+
+        current_ratio = (
+            current_counts[i]
+            / current_total
+        )
+
+        # Avoid log(0)
+        reference_ratio = max(
+            reference_ratio,
+            0.0001,
+        )
+
+        current_ratio = max(
+            current_ratio,
+            0.0001,
+        )
+
+        psi += (
+            current_ratio
+            - reference_ratio
+        ) * math.log(
+            current_ratio
+            / reference_ratio
+        )
+
+    return psi
+
+# ============================================================
+# PSI calculation
+# ============================================================
+
+def calculate_psi(
+    reference_values,
+    current_values,
+    bins=10,
+):
+
+    if not reference_values or not current_values:
+
+        return None
+
+    reference = [
+        float(x)
+        for x in reference_values
+    ]
+
+    current = [
+        float(x)
+        for x in current_values
+    ]
+
+    minimum = min(reference)
+    maximum = max(reference)
+
+    if minimum == maximum:
+
+        return 0.0
+
+    width = (
+        maximum - minimum
+    ) / bins
+
+    if width == 0:
+
+        return 0.0
+
+    reference_counts = [
+        0
+        for _ in range(bins)
+    ]
+
+    current_counts = [
+        0
+        for _ in range(bins)
+    ]
+
+    for value in reference:
+
+        index = int(
+            (value - minimum) / width
+        )
+
+        if index >= bins:
+            index = bins - 1
+
+        if index < 0:
+            index = 0
+
+        reference_counts[index] += 1
+
+    for value in current:
+
+        index = int(
+            (value - minimum) / width
+        )
+
+        if index >= bins:
+            index = bins - 1
+
+        if index < 0:
+            index = 0
+
+        current_counts[index] += 1
+
+    reference_total = len(reference)
+    current_total = len(current)
+
+    psi = 0.0
+
+    for i in range(bins):
+
+        reference_ratio = (
+            reference_counts[i]
+            / reference_total
+        )
+
+        current_ratio = (
+            current_counts[i]
+            / current_total
+        )
+
+        # Avoid log(0)
+        reference_ratio = max(
+            reference_ratio,
+            0.0001,
+        )
+
+        current_ratio = max(
+            current_ratio,
+            0.0001,
+        )
+
+        psi += (
+            current_ratio
+            - reference_ratio
+        ) * math.log(
+            current_ratio
+            / reference_ratio
+        )
+
+    return psi    
 # ============================================================
 # Kafka
 # ============================================================
