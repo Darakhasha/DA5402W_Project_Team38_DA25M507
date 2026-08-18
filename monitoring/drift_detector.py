@@ -1,5 +1,6 @@
 import csv
 import json
+import math
 import os
 from pathlib import Path
 
@@ -7,7 +8,7 @@ from kafka import KafkaConsumer
 
 
 # ============================================================
-# Configuration
+# CONFIGURATION
 # ============================================================
 
 KAFKA_BOOTSTRAP_SERVERS = os.getenv(
@@ -30,9 +31,46 @@ OUTPUT_FILE = os.getenv(
     "monitoring/data/inference_data.csv",
 )
 
+REFERENCE_DATA = os.getenv(
+    "REFERENCE_DATA",
+    "dummy/training_data.csv",
+)
+
+REFERENCE_PREDICTIONS = os.getenv(
+    "REFERENCE_PREDICTIONS",
+    "dummy/reference_predictions.csv",
+)
+
+DRIFT_WINDOW_SIZE = int(
+    os.getenv(
+        "DRIFT_WINDOW_SIZE",
+        "10",
+    )
+)
+
+PSI_THRESHOLD = float(
+    os.getenv(
+        "PSI_THRESHOLD",
+        "0.20",
+    )
+)
+
 
 # ============================================================
-# CSV storage
+# FEATURES
+# ============================================================
+
+FEATURE_COLUMNS = [
+    "hour",
+    "day_of_week",
+    "temperature",
+    "rain",
+    "traffic_index",
+]
+
+
+# ============================================================
+# CSV STORAGE
 # ============================================================
 
 CSV_COLUMNS = [
@@ -45,9 +83,6 @@ CSV_COLUMNS = [
 
 
 def initialize_csv():
-    """
-    Create the CSV file and directory if they do not exist.
-    """
 
     output_path = Path(OUTPUT_FILE)
 
@@ -72,8 +107,8 @@ def initialize_csv():
             writer.writeheader()
 
         print(
-            f"Created monitoring file: "
-            f"{OUTPUT_FILE}", flush=True
+            f"[CSV] Created: {OUTPUT_FILE}",
+            flush=True,
         )
 
 
@@ -83,12 +118,6 @@ def append_inference(
     features,
     prediction,
 ):
-    """
-    Save one inference observation.
-
-    Actual is initially empty because the true
-    ground-truth value may not be available yet.
-    """
 
     with open(
         OUTPUT_FILE,
@@ -106,17 +135,15 @@ def append_inference(
             {
                 "request_id": request_id,
                 "timestamp": timestamp,
-                "features": json.dumps(
-                    features
-                ),
+                "features": json.dumps(features),
                 "prediction": prediction,
                 "actual": "",
             }
         )
 
     print(
-        f"[CSV] Saved inference: "
-        f"{request_id}"
+        f"[CSV] Saved inference: {request_id}",
+        flush=True,
     )
 
 
@@ -124,13 +151,11 @@ def update_actual(
     request_id,
     actual,
 ):
-    """
-    Find the inference row using request_id
-    and update its actual value.
-    """
+
+    if not Path(OUTPUT_FILE).exists():
+        return
 
     rows = []
-
     found = False
 
     with open(
@@ -147,7 +172,6 @@ def update_actual(
             if row["request_id"] == request_id:
 
                 row["actual"] = actual
-
                 found = True
 
             rows.append(row)
@@ -155,13 +179,13 @@ def update_actual(
     if not found:
 
         print(
-            f"[CSV] WARNING: No inference found "
-            f"for request_id={request_id}", flush=True
+            f"[CSV] WARNING: request_id not found: "
+            f"{request_id}",
+            flush=True,
         )
 
         return
 
-    # Rewrite CSV with updated actual value.
     with open(
         OUTPUT_FILE,
         "w",
@@ -175,16 +199,17 @@ def update_actual(
         )
 
         writer.writeheader()
-
         writer.writerows(rows)
 
     print(
         f"[CSV] Updated actual={actual} "
-        f"for request_id={request_id}", flush=True
+        f"for request_id={request_id}",
+        flush=True,
     )
 
+
 # ============================================================
-# Reference-data loading
+# REFERENCE DATA
 # ============================================================
 
 def load_reference_data():
@@ -194,12 +219,12 @@ def load_reference_data():
     if not path.exists():
 
         print(
-            f"[DRIFT] WARNING: Reference data not found: "
+            f"[DRIFT] ERROR: Reference data not found: "
             f"{REFERENCE_DATA}",
             flush=True,
         )
 
-        return {}
+        return []
 
     try:
 
@@ -212,25 +237,25 @@ def load_reference_data():
 
             reader = csv.DictReader(file)
 
-            data = list(reader)
+            rows = list(reader)
 
         print(
-            f"[DRIFT] Loaded {len(data)} reference rows "
+            f"[DRIFT] Loaded {len(rows)} reference rows "
             f"from {REFERENCE_DATA}",
             flush=True,
         )
 
-        return data
+        return rows
 
     except Exception as error:
 
         print(
-            f"[DRIFT] ERROR loading reference data: "
+            f"[DRIFT] ERROR reading reference data: "
             f"{error}",
             flush=True,
         )
 
-        return {}
+        return []
 
 
 def load_reference_predictions():
@@ -264,12 +289,20 @@ def load_reference_predictions():
 
                 value = row.get("prediction")
 
-                if value is None:
+                if value in (None, ""):
                     continue
 
                 try:
-                    predictions.append(float(value))
-                except ValueError:
+
+                    predictions.append(
+                        float(value)
+                    )
+
+                except (
+                    ValueError,
+                    TypeError,
+                ):
+
                     continue
 
         print(
@@ -283,15 +316,16 @@ def load_reference_predictions():
     except Exception as error:
 
         print(
-            f"[DRIFT] ERROR loading reference predictions: "
+            f"[DRIFT] ERROR reading reference predictions: "
             f"{error}",
             flush=True,
         )
 
         return []
 
+
 # ============================================================
-# PSI calculation
+# PSI
 # ============================================================
 
 def calculate_psi(
@@ -301,43 +335,30 @@ def calculate_psi(
 ):
 
     if not reference_values or not current_values:
-
         return None
 
     reference = [
-        float(x)
-        for x in reference_values
+        float(value)
+        for value in reference_values
     ]
 
     current = [
-        float(x)
-        for x in current_values
+        float(value)
+        for value in current_values
     ]
 
     minimum = min(reference)
     maximum = max(reference)
 
     if minimum == maximum:
-
         return 0.0
 
     width = (
         maximum - minimum
     ) / bins
 
-    if width == 0:
-
-        return 0.0
-
-    reference_counts = [
-        0
-        for _ in range(bins)
-    ]
-
-    current_counts = [
-        0
-        for _ in range(bins)
-    ]
+    reference_counts = [0] * bins
+    current_counts = [0] * bins
 
     for value in reference:
 
@@ -345,11 +366,10 @@ def calculate_psi(
             (value - minimum) / width
         )
 
-        if index >= bins:
-            index = bins - 1
-
-        if index < 0:
-            index = 0
+        index = max(
+            0,
+            min(index, bins - 1),
+        )
 
         reference_counts[index] += 1
 
@@ -359,11 +379,10 @@ def calculate_psi(
             (value - minimum) / width
         )
 
-        if index >= bins:
-            index = bins - 1
-
-        if index < 0:
-            index = 0
+        index = max(
+            0,
+            min(index, bins - 1),
+        )
 
         current_counts[index] += 1
 
@@ -384,7 +403,7 @@ def calculate_psi(
             / current_total
         )
 
-        # Avoid log(0)
+        # Prevent log(0)
         reference_ratio = max(
             reference_ratio,
             0.0001,
@@ -396,136 +415,341 @@ def calculate_psi(
         )
 
         psi += (
-            current_ratio
-            - reference_ratio
+            current_ratio - reference_ratio
         ) * math.log(
-            current_ratio
-            / reference_ratio
+            current_ratio / reference_ratio
         )
 
     return psi
 
+
 # ============================================================
-# PSI calculation
+# FEATURE DRIFT
 # ============================================================
 
-def calculate_psi(
-    reference_values,
-    current_values,
-    bins=10,
+def detect_feature_drift(
+    reference_rows,
+    current_events,
 ):
 
-    if not reference_values or not current_values:
+    print(
+        "",
+        flush=True,
+    )
 
-        return None
+    print(
+        "========== FEATURE DRIFT ==========",
+        flush=True,
+    )
 
-    reference = [
-        float(x)
-        for x in reference_values
-    ]
+    if not reference_rows:
 
-    current = [
-        float(x)
-        for x in current_values
-    ]
-
-    minimum = min(reference)
-    maximum = max(reference)
-
-    if minimum == maximum:
-
-        return 0.0
-
-    width = (
-        maximum - minimum
-    ) / bins
-
-    if width == 0:
-
-        return 0.0
-
-    reference_counts = [
-        0
-        for _ in range(bins)
-    ]
-
-    current_counts = [
-        0
-        for _ in range(bins)
-    ]
-
-    for value in reference:
-
-        index = int(
-            (value - minimum) / width
+        print(
+            "[DRIFT] Cannot calculate feature drift: "
+            "reference data unavailable",
+            flush=True,
         )
 
-        if index >= bins:
-            index = bins - 1
+        return False
 
-        if index < 0:
-            index = 0
+    drift_detected = False
 
-        reference_counts[index] += 1
+    for feature in FEATURE_COLUMNS:
 
-    for value in current:
+        reference_values = []
+        current_values = []
 
-        index = int(
-            (value - minimum) / width
+        # -----------------------------
+        # Reference distribution
+        # -----------------------------
+
+        for row in reference_rows:
+
+            value = row.get(feature)
+
+            if value in (None, ""):
+                continue
+
+            try:
+
+                reference_values.append(
+                    float(value)
+                )
+
+            except (
+                ValueError,
+                TypeError,
+            ):
+
+                continue
+
+        # -----------------------------
+        # Current distribution
+        # -----------------------------
+
+        for event in current_events:
+
+            features = event.get(
+                "features",
+                {},
+            )
+
+            value = features.get(feature)
+
+            if value in (None, ""):
+                continue
+
+            try:
+
+                current_values.append(
+                    float(value)
+                )
+
+            except (
+                ValueError,
+                TypeError,
+            ):
+
+                continue
+
+        if not reference_values:
+
+            print(
+                f"{feature}: no reference data",
+                flush=True,
+            )
+
+            continue
+
+        if not current_values:
+
+            print(
+                f"{feature}: no current data",
+                flush=True,
+            )
+
+            continue
+
+        psi = calculate_psi(
+            reference_values,
+            current_values,
         )
 
-        if index >= bins:
-            index = bins - 1
-
-        if index < 0:
-            index = 0
-
-        current_counts[index] += 1
-
-    reference_total = len(reference)
-    current_total = len(current)
-
-    psi = 0.0
-
-    for i in range(bins):
-
-        reference_ratio = (
-            reference_counts[i]
-            / reference_total
+        print(
+            f"{feature}: PSI={psi:.4f}",
+            flush=True,
         )
 
-        current_ratio = (
-            current_counts[i]
-            / current_total
+        if psi >= PSI_THRESHOLD:
+
+            print(
+                f"[ALERT] DRIFT detected in "
+                f"{feature}",
+                flush=True,
+            )
+
+            drift_detected = True
+
+    if drift_detected:
+
+        print(
+            "!!! FEATURE DRIFT DETECTED !!!",
+            flush=True,
         )
 
-        # Avoid log(0)
-        reference_ratio = max(
-            reference_ratio,
-            0.0001,
+    else:
+
+        print(
+            "NO FEATURE DRIFT",
+            flush=True,
         )
 
-        current_ratio = max(
-            current_ratio,
-            0.0001,
-        )
+    return drift_detected
 
-        psi += (
-            current_ratio
-            - reference_ratio
-        ) * math.log(
-            current_ratio
-            / reference_ratio
-        )
 
-    return psi    
 # ============================================================
-# Kafka
+# PREDICTION DRIFT
+# ============================================================
+
+def detect_prediction_drift(
+    reference_predictions,
+    current_events,
+):
+
+    print(
+        "",
+        flush=True,
+    )
+
+    print(
+        "========== PREDICTION DRIFT ==========",
+        flush=True,
+    )
+
+    if not reference_predictions:
+
+        print(
+            "[DRIFT] Prediction drift cannot be "
+            "calculated because reference predictions "
+            "are unavailable.",
+            flush=True,
+        )
+
+        return False
+
+    current_predictions = []
+
+    for event in current_events:
+
+        prediction = event.get(
+            "prediction"
+        )
+
+        if prediction in (None, ""):
+            continue
+
+        try:
+
+            current_predictions.append(
+                float(prediction)
+            )
+
+        except (
+            ValueError,
+            TypeError,
+        ):
+
+            continue
+
+    if not current_predictions:
+
+        print(
+            "[DRIFT] No current predictions.",
+            flush=True,
+        )
+
+        return False
+
+    psi = calculate_psi(
+        reference_predictions,
+        current_predictions,
+    )
+
+    print(
+        f"Prediction PSI={psi:.4f}",
+        flush=True,
+    )
+
+    if psi >= PSI_THRESHOLD:
+
+        print(
+            "!!! PREDICTION DRIFT DETECTED !!!",
+            flush=True,
+        )
+
+        return True
+
+    print(
+        "NO PREDICTION DRIFT",
+        flush=True,
+    )
+
+    return False
+
+
+# ============================================================
+# DRIFT WINDOW
+# ============================================================
+
+def run_drift_detection(
+    reference_rows,
+    reference_predictions,
+    current_window,
+):
+
+    print(
+        "",
+        flush=True,
+    )
+
+    print(
+        "########################################",
+        flush=True,
+    )
+
+    print(
+        "       RUNNING DRIFT DETECTION",
+        flush=True,
+    )
+
+    print(
+        f"Window size: {len(current_window)}",
+        flush=True,
+    )
+
+    print(
+        "########################################",
+        flush=True,
+    )
+
+    feature_drift = detect_feature_drift(
+        reference_rows,
+        current_window,
+    )
+
+    prediction_drift = detect_prediction_drift(
+        reference_predictions,
+        current_window,
+    )
+
+    print(
+        "",
+        flush=True,
+    )
+
+    print(
+        "=============== RESULT ===============",
+        flush=True,
+    )
+
+    print(
+        f"Feature drift    : {feature_drift}",
+        flush=True,
+    )
+
+    print(
+        f"Prediction drift : {prediction_drift}",
+        flush=True,
+    )
+
+    if feature_drift or prediction_drift:
+
+        print(
+            "!!! DRIFT DETECTED !!!",
+            flush=True,
+        )
+
+    else:
+
+        print(
+            "NO DRIFT DETECTED",
+            flush=True,
+        )
+
+    print(
+        "======================================",
+        flush=True,
+    )
+
+
+# ============================================================
+# KAFKA
 # ============================================================
 
 def create_consumer():
 
     return KafkaConsumer(
+
         KAFKA_TOPIC,
 
         bootstrap_servers=(
@@ -537,7 +761,7 @@ def create_consumer():
                 value.decode("utf-8")
             ),
 
-        auto_offset_reset= "earliest",#"latest",
+        auto_offset_reset="earliest",
 
         enable_auto_commit=True,
 
@@ -546,49 +770,83 @@ def create_consumer():
 
 
 # ============================================================
-# Main monitoring loop
+# MAIN
 # ============================================================
 
 def main():
 
     print(
-        "======================================"
+        "======================================",
+        flush=True,
     )
 
     print(
-        "     INFERENCE DATA MONITOR STARTED"
+        "     INFERENCE DATA MONITOR STARTED",
+        flush=True,
     )
 
     print(
-        "======================================"
+        "======================================",
+        flush=True,
     )
 
     print(
-        f"Kafka: "
-        f"{KAFKA_BOOTSTRAP_SERVERS}"
+        f"Kafka: {KAFKA_BOOTSTRAP_SERVERS}",
+        flush=True,
     )
 
     print(
-        f"Topic: "
-        f"{KAFKA_TOPIC}"
+        f"Topic: {KAFKA_TOPIC}",
+        flush=True,
     )
 
     print(
-        f"Output: "
-        f"{OUTPUT_FILE}"
+        f"Output: {OUTPUT_FILE}",
+        flush=True,
     )
 
     print(
-        "======================================"
+        f"Reference data: {REFERENCE_DATA}",
+        flush=True,
+    )
+
+    print(
+        f"Reference predictions: "
+        f"{REFERENCE_PREDICTIONS}",
+        flush=True,
+    )
+
+    print(
+        f"Window size: {DRIFT_WINDOW_SIZE}",
+        flush=True,
+    )
+
+    print(
+        f"PSI threshold: {PSI_THRESHOLD}",
+        flush=True,
+    )
+
+    print(
+        "======================================",
+        flush=True,
     )
 
     initialize_csv()
 
+    reference_rows = load_reference_data()
+
+    reference_predictions = (
+        load_reference_predictions()
+    )
+
     consumer = create_consumer()
 
     print(
-        "Waiting for Kafka events..."
+        "Waiting for Kafka events...",
+        flush=True,
     )
+
+    current_window = []
 
     for message in consumer:
 
@@ -600,9 +858,9 @@ def main():
                 "event_type"
             )
 
-            # ==================================================
-            # Inference event
-            # ==================================================
+            # ================================================
+            # INFERENCE
+            # ================================================
 
             if event_type == "inference":
 
@@ -626,9 +884,9 @@ def main():
                 if not request_id:
 
                     print(
-                        "[ERROR] "
-                        "Inference event has no "
-                        "request_id" , flush=True
+                        "[ERROR] Inference event "
+                        "has no request_id",
+                        flush=True,
                     )
 
                     continue
@@ -640,9 +898,35 @@ def main():
                     prediction=prediction,
                 )
 
-            # ==================================================
-            # Feedback event
-            # ==================================================
+                current_window.append(
+                    event
+                )
+
+                print(
+                    f"[KAFKA] Received inference "
+                    f"{len(current_window)}/"
+                    f"{DRIFT_WINDOW_SIZE}",
+                    flush=True,
+                )
+
+                # ============================================
+                # RUN AFTER 10 EVENTS
+                # ============================================
+
+                if len(current_window) >= DRIFT_WINDOW_SIZE:
+
+                    run_drift_detection(
+                        reference_rows,
+                        reference_predictions,
+                        current_window,
+                    )
+
+                    # Start next window
+                    current_window = []
+
+            # ================================================
+            # FEEDBACK
+            # ================================================
 
             elif event_type == "feedback":
 
@@ -657,9 +941,9 @@ def main():
                 if not request_id:
 
                     print(
-                        "[ERROR] "
-                        "Feedback event has no "
-                        "request_id", flush=True
+                        "[ERROR] Feedback event "
+                        "has no request_id",
+                        flush=True,
                     )
 
                     continue
@@ -667,9 +951,9 @@ def main():
                 if actual is None:
 
                     print(
-                        "[ERROR] "
-                        "Feedback event has no "
-                        "actual value", flush=True
+                        "[ERROR] Feedback event "
+                        "has no actual value",
+                        flush=True,
                     )
 
                     continue
@@ -679,22 +963,24 @@ def main():
                     actual=actual,
                 )
 
-            # ==================================================
-            # Unknown event
-            # ==================================================
+            # ================================================
+            # UNKNOWN EVENT
+            # ================================================
 
             else:
 
                 print(
-                    f"[WARNING] Unknown "
-                    f"event_type={event_type}", flush=True
+                    f"[WARNING] Unknown event_type="
+                    f"{event_type}",
+                    flush=True,
                 )
 
         except Exception as error:
 
             print(
                 "[ERROR] Failed to process "
-                f"Kafka event: {error}", flush=True
+                f"Kafka event: {error}",
+                flush=True,
             )
 
 
