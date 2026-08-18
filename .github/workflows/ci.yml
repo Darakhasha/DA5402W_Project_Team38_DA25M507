@@ -12,10 +12,13 @@ on:
 permissions:
   contents: read
   packages: write
+  
+    
 
 env:
   IMAGE_NAME: ghcr.io/${{  lower(github.repository_owner) }}/taxi-api
   IMAGE_TAG: ${{ github.sha }}  
+  
 
 jobs:
   test:
@@ -26,6 +29,11 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('IMAGE_NAME', `ghcr.io/${context.repo.owner.toLowerCase()}/taxi-api`);  
 
       #- name: Set up Python
       #  uses: actions/setup-python@v5
