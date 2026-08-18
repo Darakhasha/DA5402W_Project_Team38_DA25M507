@@ -4,7 +4,7 @@ metadata:
   name: taxi-monitoring-data
 spec:
   accessModes:
-    - ReadWriteMany #ReadWriteOnce
+    - ReadWriteOnce #ReadWriteMany #
   resources:
     requests:
       storage: 1Gi
