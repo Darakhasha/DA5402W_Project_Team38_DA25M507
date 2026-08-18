@@ -68,6 +68,12 @@ jobs:
         run: |
           docker push  ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
+      - name: Deploy deployment.yml
+        run: kubectl apply -f k8s/deployment.yaml
+
+      - name: Deploy service.yml
+        run: kubectl apply -f k8s/service.yaml
+
       - name: Deploy to Kubernetes
         run: |
           kubectl set image deployment/taxi-api  taxi-api=${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}    
@@ -84,5 +90,14 @@ jobs:
       - name: Smoke test API
         #shell: powershell
         run: python scripts/smoke_test.py
+
+      - name: Deploy Prometheus
+        run: kubectl apply -f k8s/prometheus.yaml
+
+      - name: Restart Prometheus
+        run: kubectl rollout restart deployment/prometheus
+
+      - name: Verify Prometheus rollout
+        run: kubectl rollout status deployment/prometheus --timeout=120s  
 
         
