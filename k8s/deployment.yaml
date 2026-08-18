@@ -17,10 +17,12 @@ spec:
         app: taxi-api
 
     spec:
+      imagePullSecrets:
+        - name: ghcr-secret
       containers:
         - name: taxi-api
           image: taxi-api
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always #IfNotPresent
 
           ports:
             - containerPort: 8000
