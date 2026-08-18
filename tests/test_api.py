@@ -23,7 +23,11 @@ def test_health():
 
 
 def test_predict():
-    response = client.post("/predict")
+    payload = {
+        "pickup_location_id": 1,
+        "passenger_count": 2
+    }
+    response = client.post("/predict",json=payload)
 
     assert response.status_code == 200
 
