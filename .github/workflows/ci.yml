@@ -100,4 +100,14 @@ jobs:
       - name: Verify Prometheus rollout
         run: kubectl rollout status deployment/prometheus --timeout=120s  
 
+      - name: Deploy Kafka
+        run: kubectl apply -f k8s/kafka.yaml
+
+      - name: Verify Kafka rollout
+        run: kubectl rollout status deployment/kafka --timeout=180s  
+
+      - name: Create Kafka topic
+        run: |
+          kubectl exec deployment/kafka -- /opt/kafka/bin/kafka-topics.sh --create --if-not-exists --topic taxi-events --bootstrap-server kafka:9092 --partitions 1 --replication-factor 1  
+
         

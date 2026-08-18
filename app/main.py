@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 import random
 from prometheus_fastapi_instrumentator import Instrumentator
+from app.kafka_producer import publish_prediction_request
 
 app = FastAPI(
     title="Taxi Demand Prediction API",
@@ -23,8 +24,11 @@ def health():
     }
 
 @app.post("/predict")
-def predict():
+def predict(data: dict):
     prediction = random.randint(100, 300)
+   # publish_prediction_request(data.model_dump())
+
+    publish_prediction_request(data)
 
     return {
         "predicted_demand": prediction
