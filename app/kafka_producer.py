@@ -14,12 +14,25 @@ KAFKA_TOPIC = os.getenv(
     "taxi-events"
 )
 
+_producer = None
 
-producer = KafkaProducer(
-    bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-    value_serializer=lambda value: json.dumps(value).encode("utf-8")
-)
+# producer = KafkaProducer(
+#     bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+#     value_serializer=lambda value: json.dumps(value).encode("utf-8")
+# )
 
+def get_producer():
+    global _producer
+    # Skip creating a real producer if running unit tests
+    if os.getenv("TESTING") == "true":
+        return None
+        
+    if _producer is None:
+        _producer = KafkaProducer(
+            bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+            value_serializer=lambda value: json.dumps(value).encode("utf-8")
+        )
+    return _producer
 
 def publish_prediction_request(request_data: dict) -> None:
     """
@@ -27,7 +40,10 @@ def publish_prediction_request(request_data: dict) -> None:
 
     The function does not assume any particular feature names.
     """
-
+    producer = get_producer()
+    if producer is None:
+        return
+    
     future = producer.send(
         KAFKA_TOPIC,
         value=request_data
