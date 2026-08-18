@@ -1,7 +1,12 @@
 from fastapi import FastAPI
 import random
 from prometheus_fastapi_instrumentator import Instrumentator
-from app.kafka_producer import publish_prediction_request
+from app.kafka_producer import (
+    publish_inference,
+    publish_feedback,
+)
+import uuid
+from datetime import datetime, timezone
 
 app = FastAPI(
     title="Taxi Demand Prediction API",
@@ -26,10 +31,37 @@ def health():
 @app.post("/predict")
 def predict(data: dict):
     prediction = random.randint(100, 300)
-   # publish_prediction_request(data.model_dump())
+    request_id = str(uuid.uuid4())
 
-    publish_prediction_request(data)
+    timestamp = datetime.now(
+        timezone.utc
+    ).isoformat()
+
+    publish_inference(
+        request_id=request_id,
+        timestamp=timestamp,
+        features=data,
+        prediction=prediction,
+    )
 
     return {
-        "predicted_demand": prediction
+        "request_id": request_id,
+        "prediction": prediction,
     }
+
+# @app.post("/feedback")
+# def feedback(
+#     request_id: str,
+#     actual: float,
+# ):
+
+#     publish_feedback(
+#         request_id=request_id,
+#         actual=actual,
+#     )
+
+#     return {
+#         "status": "feedback recorded",
+#         "request_id": request_id,
+#         "actual": actual,
+#     }

@@ -18,6 +18,7 @@ permissions:
 env:
   IMAGE_NAME: ghcr.io/${{  github.repository_owner }}/taxi-api
   IMAGE_TAG: ${{ github.sha }}  
+
   
 
 jobs:
@@ -111,5 +112,17 @@ jobs:
       - name: Create Kafka topic
         run: |
           kubectl exec deployment/kafka -- /opt/kafka/bin/kafka-topics.sh --create --if-not-exists --topic taxi-events --bootstrap-server kafka:9092 --partitions 1 --replication-factor 1  
+
+      - name: Deploy monitoring storage
+        run: kubectl apply -f k8s/monitoring-storage.yaml
+      
+      - name: Deploy drift monitor
+        run: kubectl apply -f k8s/drift-monitor.yaml
+
+      - name: Set drift monitor image
+        run: kubectl set image deployment/drift-monitor drift-monitor=${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+
+      - name: Verify drift monitor
+        run: kubectl rollout status deployment/drift-monitor --timeout=120s    
 
         
