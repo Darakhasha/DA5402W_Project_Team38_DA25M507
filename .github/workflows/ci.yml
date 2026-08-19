@@ -138,9 +138,11 @@ jobs:
         run: |
           helm repo add minio https://charts.min.io/
           helm repo update
-          kubectl delete statefulset minio --ignore-not-found
-          helm upgrade --install minio minio/minio --set rootUser="minioadmin" --set rootPassword="minioadmin" --set persistence.enabled=false --set service.type=ClusterIP --timeout 3m0s
+          helm uninstall minio || true
+          kubectl delete jobs -l app=minio --ignore-not-found
+          helm upgrade --install minio minio/minio --set rootUser="minioadmin" --set rootPassword="minioadmin" --set persistence.enabled=false --set service.type=ClusterIP --no-hooks
 
+          
       - name: Verify MinIO rollout
         run: kubectl rollout status deployment/minio --timeout=120s
 
