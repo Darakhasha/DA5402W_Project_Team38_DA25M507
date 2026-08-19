@@ -16,3 +16,6 @@ __pycache__/
 
 # OS files
 .DS_Store
+
+dummy/incoming_data.csv
+dummy/training_data.csv

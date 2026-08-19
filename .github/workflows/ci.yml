@@ -155,12 +155,20 @@ jobs:
       - name: Port-Forward MinIO to Localhost
         run: python -c "import subprocess, time; subprocess.Popen(['kubectl', 'port-forward', 'deployment/minio', '9000:9000','9001:9001']); time.sleep(5)"
       
-      - name: Upload Artifacts to MinIO
+      # - name: Upload Artifacts to MinIO
+      #   env:
+      #     MINIO_ENDPOINT: "http://127.0.0.1:9000"
+      #     AWS_ACCESS_KEY_ID: "minioadmin"
+      #     AWS_SECRET_ACCESS_KEY: "minioadmin"
+      #   run: python scripts/upload_file.py --bucket data-files --filepath dummy/training_data.csv --dest-path data/training_data.csv
+
+      - name: Download Train data from MinIO
         env:
           MINIO_ENDPOINT: "http://127.0.0.1:9000"
           AWS_ACCESS_KEY_ID: "minioadmin"
           AWS_SECRET_ACCESS_KEY: "minioadmin"
-        run: python scripts/upload_file.py --bucket data-files --filepath dummy/training_data.csv --dest-path data/training_data.csv
+        run: python -c "from scripts.s3_utils import download_file; download_file('data-files','data/training_data.csv''dummy/training_data.csv')"
+
 
       - name: Deploy Ingestion CronJob
         run: |
