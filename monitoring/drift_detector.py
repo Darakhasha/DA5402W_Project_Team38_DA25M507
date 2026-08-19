@@ -980,6 +980,23 @@ def calculate_prediction_performance():
 # MAIN
 # ============================================================
 
+def upload_gen_file(local_file_path,OBJECT_NAME,BUCKET):
+    if not os.path.exists(local_file_path):
+                return
+
+    file_name = Path(local_file_path).name
+    dest_path = f"{OBJECT_NAME.strip('/')}/{file_name}"
+
+    try:
+        upload_file(
+            local_path=local_file_path,
+            bucket=BUCKET,
+            object_name=dest_path
+        )
+        print(f"[MINIO] Uploaded {local_file_path} -> {BUCKET}/{dest_path}", flush=True)
+    except Exception as err:
+        print(f"[MINIO] Upload error for {local_file_path}: {err}", flush=True)    
+
 def main():
 
     print(
@@ -1184,23 +1201,10 @@ def main():
                     flush=True,
                 )
 
-            if os.path.exists(OUTPUT_FILE):
-               subprocess.run([
-                            sys.executable,
-                            "scripts/upload_flie.py",
-                            "--bucket", BUCKET,
-                            "--object-name", f"{OBJECT_NAME}/{OUTPUT_FILE.replace("\\", "/").split("/")[-1] }",
-                            "--file-path", f"{LOCAL_PATH}/{OUTPUT_FILE.replace("\\", "/").split("/")[-1] }"
-                        ], check=True)
-
-            if os.path.exists(REFERENCE_PREDICTIONS):
-                        subprocess.run([
-                                    sys.executable,
-                                    "scripts/upload_flie.py",
-                                    "--bucket", BUCKET,
-                                    "--object-name", f"{OBJECT_NAME}/{REFERENCE_PREDICTIONS.replace("\\", "/").split("/")[-1] }",
-                                    "--file-path", f"{LOCAL_PATH}/{REFERENCE_PREDICTIONS.replace("\\", "/").split("/")[-1] }"
-                                ], check=True)
+        
+            upload_gen_file(OUTPUT_FILE,OBJECT_NAME,BUCKET)
+            upload_gen_file(REFERENCE_PREDICTIONS,OBJECT_NAME,BUCKET)
+            
         except Exception as error:
 
             print(

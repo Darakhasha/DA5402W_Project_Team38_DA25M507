@@ -16,13 +16,13 @@ def main():
         help="Target MinIO bucket name (default: TAXI_BUCKET_NAME env or 'data-files')"
     )
     parser.add_argument(
-        "-f", "--file-path",
+        "-f", "--filepath",
         type=str,
         default="dummy/training_data.csv",
         help="Path to the local file to upload (default: 'dummy/training_data.csv')"
     )
     parser.add_argument(
-            "-f", "--dest-path",
+            "-d", "--dest-path",
             type=str,
             default="data/training_data.csv",
             help="Destination Path to upload (default: 'data/training_data.csv')"
@@ -42,12 +42,12 @@ def main():
     args = parser.parse_args()
 
     # Validate local file exists
-    if not os.path.exists(args.file_path):
-        print(f"Error: Local file '{args.file_path}' not found.", file=sys.stderr)
+    if not os.path.exists(args.filepath):
+        print(f"Error: Local file '{args.filepath}' not found.", file=sys.stderr)
        
         bucket =  args.bucket
         object_name = args.dest_path
-        local_path = args.file_path
+        local_path = args.filepath
 
        
         download_file(bucket=bucket, object_name=object_name, local_path=local_path)
@@ -56,7 +56,7 @@ def main():
     # 1. Always upload/overwrite the 'latest' file
     print(f"--> Uploading latest file to bucket '{args.bucket}'...")
     upload_file(
-        local_path=args.file_path,
+        local_path=args.filepath,
         bucket=args.bucket,
         object_name=args.dest_path
     )
@@ -66,7 +66,7 @@ def main():
     #     versioned_name = f"models/taxi_model_{args.commit_sha}.pkl"
     #     print(f"--> Uploading versioned file ({args.commit_sha}) to bucket '{args.bucket}'...")
     #     upload_file(
-    #         local_path=args.file_path,
+    #         local_path=args.filepath,
     #         bucket=args.bucket,
     #         object_name=versioned_name
     #     )
