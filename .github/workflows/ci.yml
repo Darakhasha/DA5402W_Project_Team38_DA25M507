@@ -151,6 +151,9 @@ jobs:
         
       - name: Verify MinIO rollout
         run: kubectl rollout status deployment/minio --timeout=120s
+
+      - name: Wait for MinIO Pod
+        run: kubectl wait --for=condition=ready pod -l app=minio --timeout=120s  
     
       - name: Port-Forward MinIO to Localhost
         run: python -c "import subprocess, time; subprocess.Popen(['kubectl', 'port-forward', 'svc/minio', '9000:9000']); time.sleep(5)"
