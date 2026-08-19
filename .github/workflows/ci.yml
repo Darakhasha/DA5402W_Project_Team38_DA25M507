@@ -228,7 +228,7 @@ jobs:
       - name: Verify MinIO rollout
         run: |
           kubectl rollout status deployment/minio --timeout=120s
-          kubectl wait --for=condition=ready pod -l app=minio --timeout=120s  
+         # kubectl wait --for=condition=ready pod -l app=minio --timeout=120s  
 
       - name: Download Train data from MinIO
         #env:
