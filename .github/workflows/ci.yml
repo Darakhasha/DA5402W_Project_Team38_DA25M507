@@ -154,7 +154,13 @@ jobs:
   
 
       - name: Upload Artifacts to MinIO
-        run: python scripts/upload_file.py  
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+          # Or if using your own env var names:
+          MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
+          MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+        run: python scripts/upload_file.py --bucket data-files --filepath dummy/training_data.csv --dest-path data/training_data.csv
 
       - name: Deploy Ingestion CronJob
         run: kubectl apply -f k8s/pipeline-1-ingestion.yaml
