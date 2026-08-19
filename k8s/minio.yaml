@@ -50,7 +50,7 @@ spec:
       name: api
     - port: 9001
       targetPort: 9001
-      nodePort: 30800
+      #nodePort: 30800
       name: console
   selector:
     app: minio

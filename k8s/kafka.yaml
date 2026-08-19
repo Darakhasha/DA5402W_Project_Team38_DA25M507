@@ -73,6 +73,6 @@ spec:
     - name: kafka
       port: 9092
       targetPort: 9092
-      nodePort: 30800
+      #nodePort: 30800
 
   type: NodePort #ClusterIP
