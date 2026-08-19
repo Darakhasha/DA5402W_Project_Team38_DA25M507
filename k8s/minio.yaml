@@ -6,6 +6,8 @@ metadata:
     app: minio
 spec:
   replicas: 1
+  strategy:
+    type: Recreate # Safely terminates pod because data is saved on the host
   selector:
     matchLabels:
       app: minio
@@ -30,6 +32,9 @@ spec:
           ports:
             - containerPort: 9000
             - containerPort: 9001
+          volumeMounts:
+            - name: minio-storage
+              mountPath: /data # Maps container /data to host storage
           resources:
             requests:
               memory: "128Mi"
@@ -37,20 +42,24 @@ spec:
             limits:
               memory: "512Mi"
               cpu: "500m"
+      volumes:
+        - name: minio-storage
+          hostPath:
+            path: /data/minio-data # Directory on your host machine storing the actual files
+            type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: minio
 spec:
-  type: NodePort #ClusterIP
+  type: NodePort
   ports:
     - port: 9000
       targetPort: 9000
       name: api
     - port: 9001
       targetPort: 9001
-      #nodePort: 30800
       name: console
   selector:
     app: minio
