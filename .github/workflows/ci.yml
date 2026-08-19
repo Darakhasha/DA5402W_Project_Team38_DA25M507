@@ -85,6 +85,11 @@ jobs:
       #       --set persistence.size=10Gi \
       #       --set service.type=ClusterIP
 
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.14.0'
+
       - name: Deploy MinIO
         run: |
           helm repo add minio https://charts.min.io/
