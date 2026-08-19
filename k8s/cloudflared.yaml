@@ -15,16 +15,16 @@ spec:
       containers:
       - name: minio-tunnel
         image: cloudflare/cloudflared:latest
-        args: ["tunnel", "--url", "minio.default.svc.cluster.local:9001"] # K8s Service Name:Port
+        args: ["tunnel", "--url", "http://minio.default.svc.cluster.local:9001"] # K8s Service Name:Port
       - name: kafka-tunnel  
         image: cloudflare/cloudflared:latest
-        args: ["tunnel", "--url", "kafka.default.svc.cluster.local:9090"] # K8s Service Name:Port
+        args: ["tunnel", "--url", "http://kafka.default.svc.cluster.local:9090"] # K8s Service Name:Port
       - name: serving-tunnel
         image: cloudflare/cloudflared:latest
-        args: ["tunnel", "--url", "taxi-serving-service.default.svc.cluster.local:80"]
+        args: ["tunnel", "--url", "http://taxi-serving-service.default.svc.cluster.local:80"]
       - name: prometheus-tunnel
         image: cloudflare/cloudflared:latest
-        args: ["tunnel", "--url", "prometheus.default.svc.cluster.local:9090"]
+        args: ["tunnel", "--url", "http://prometheus.default.svc.cluster.local:9090"]
       - name: taxi-api-tunnel
         image: cloudflare/cloudflared:latest
-        args: ["tunnel", "--url", "taxi-api-service.default.svc.cluster.local:8000"]
+        args: ["tunnel", "--url", "http://taxi-api-service.default.svc.cluster.local:8000"]
