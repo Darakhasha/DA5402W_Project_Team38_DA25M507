@@ -152,19 +152,14 @@ jobs:
       - name: Verify MinIO rollout
         run: kubectl rollout status deployment/minio --timeout=120s
 
-      - name: Wait for MinIO Pod
-        run: kubectl wait --for=condition=ready pod -l app=minio --timeout=120s  
-    
       - name: Port-Forward MinIO to Localhost
-        run: python -c "import subprocess, time; subprocess.Popen(['kubectl', 'port-forward', 'svc/minio', '9000:9000']); time.sleep(5)"
-
+        run: python -c "import subprocess, time; subprocess.Popen(['kubectl', 'port-forward', 'deployment/minio', '9000:9000']); time.sleep(5)"
+      
       - name: Upload Artifacts to MinIO
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ACCESS_KEY }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }}
-          # Or if using your own env var names:
-          MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
-          MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+          MINIO_ENDPOINT: "http://127.0.0.1:9000"
+          AWS_ACCESS_KEY_ID: "minioadmin"
+          AWS_SECRET_ACCESS_KEY: "minioadmin"
         run: python scripts/upload_file.py --bucket data-files --filepath dummy/training_data.csv --dest-path data/training_data.csv
 
       - name: Deploy Ingestion CronJob
