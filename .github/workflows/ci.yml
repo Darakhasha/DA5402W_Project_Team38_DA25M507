@@ -157,7 +157,7 @@ jobs:
       
       - name: Upload Artifacts to MinIO
         env:
-          MINIO_ENDPOINT: "http://127.0.0.1:9000"
+          MINIO_ENDPOINT: "http://127.0.0.1:9001"
           AWS_ACCESS_KEY_ID: "minioadmin"
           AWS_SECRET_ACCESS_KEY: "minioadmin"
         run: python scripts/upload_file.py --bucket data-files --filepath dummy/training_data.csv --dest-path data/training_data.csv
@@ -242,4 +242,18 @@ jobs:
         run: |
           kubectl rollout status deployment/drift-monitor --timeout=300s
           kubectl rollout status deployment/simulated-label-producer --timeout=300s  
+
+      - name: Port-Forward All Services
+        run: |
+          python -c "
+          import subprocess, time
+          services = [
+              ['deployment/pipeline-3-serving', '8000:8000'],
+              ['deployment/prometheus', '9090:9090'],
+              ['deployment/taxi-api', '8080:8080']
+          ]
+          for target, ports in services:
+              subprocess.Popen(['kubectl', 'port-forward', target, ports])
+          time.sleep(5)
+          "    
               
