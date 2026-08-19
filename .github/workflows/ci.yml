@@ -243,18 +243,8 @@ jobs:
           kubectl rollout status deployment/drift-monitor --timeout=300s
           kubectl rollout status deployment/simulated-label-producer --timeout=300s  
 
-      - name: Port-Forward All Services
+      - name: Deploy Permanent Cloudflare Tunnels
         run: |
-          python -c "
-          import subprocess, time
-          services = [
-              ['deployment/minio', '9001:9001'],
-              ['deployment/pipeline-3-serving', '8000:8000'],
-              ['deployment/prometheus', '9090:9090'],
-              ['deployment/taxi-api', '8080:8080']
-          ]
-          for target, ports in services:
-              subprocess.Popen(['kubectl', 'port-forward', target, ports])
-          time.sleep(5)
-          "    
-              
+          kubectl apply -f k8s/cloudflared.yaml
+          kubectl rollout status deployment/cloudflare-tunnels --timeout=60s
+                    

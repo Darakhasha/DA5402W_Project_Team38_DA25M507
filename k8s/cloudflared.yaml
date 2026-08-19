@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflare-tunnels
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloudflare-tunnels
+  template:
+    metadata:
+      labels:
+        app: cloudflare-tunnels
+    spec:
+      containers:
+      - name: minio-tunnel
+        image: cloudflare/cloudflared:latest
+        args: ["tunnel", "--url", "http://minio:9001"]
+      - name: serving-tunnel
+        image: cloudflare/cloudflared:latest
+        args: ["tunnel", "--url", "http://pipeline-3-serving:8000"]
+      - name: prometheus-tunnel
+        image: cloudflare/cloudflared:latest
+        args: ["tunnel", "--url", "http://prometheus:9090"]
+      - name: taxi-api-tunnel
+        image: cloudflare/cloudflared:latest
+        args: ["tunnel", "--url", "http://taxi-api:8080"]
