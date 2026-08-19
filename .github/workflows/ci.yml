@@ -85,10 +85,54 @@ jobs:
       #       --set persistence.size=10Gi \
       #       --set service.type=ClusterIP
 
+      # Cross-platform Helm setup (Windows, Linux, macOS)
       - name: Set up Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: 'v3.14.0'
+        run: |
+          python -c "
+          import os, sys, shutil, urllib.request, zipfile, tarfile, platform
+
+          if shutil.which('helm'):
+              print('Helm is already installed in PATH.')
+              sys.exit(0)
+
+          system = platform.system().lower()
+          print(f'Helm not found. Downloading for {system}...')
+
+          if system == 'windows':
+              url = 'https://get.helm.sh/helm-v3.14.0-windows-amd64.zip'
+              archive = 'helm.zip'
+          elif system == 'darwin':
+              url = 'https://get.helm.sh/helm-v3.14.0-darwin-amd64.tar.gz'
+              archive = 'helm.tar.gz'
+          else:
+              url = 'https://get.helm.sh/helm-v3.14.0-linux-amd64.tar.gz'
+              archive = 'helm.tar.gz'
+
+          urllib.request.urlretrieve(url, archive)
+
+          if system == 'windows':
+              with zipfile.ZipFile(archive, 'r') as z:
+                  z.extract('windows-amd64/helm.exe', '.')
+              shutil.move('windows-amd64/helm.exe', 'helm.exe')
+              os.remove(archive)
+              shutil.rmtree('windows-amd64', ignore_errors=True)
+          else:
+              with tarfile.open(archive, 'r:gz') as t:
+                  t.extractall('.')
+              folder = f'{system}-amd64'
+              shutil.move(f'{folder}/helm', 'helm')
+              os.chmod('helm', 0o755)
+              os.remove(archive)
+              shutil.rmtree(folder, ignore_errors=True)
+
+          # Add current workspace to GITHUB_PATH so subsequent steps find 'helm'
+          github_path = os.environ.get('GITHUB_PATH')
+          if github_path:
+              with open(github_path, 'a') as f:
+                  f.write(os.getcwd() + '\n')
+
+          print('Helm successfully installed and added to PATH.')
+          "
 
       - name: Deploy MinIO
         run: |
