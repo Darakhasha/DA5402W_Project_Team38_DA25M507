@@ -7,8 +7,8 @@ import sys
 from pathlib import Path
 
 from kafka import KafkaConsumer
-sys.path.append(str(Path(__file__).resolve().parent.parent))
-from s3_utils import upload_file 
+#sys.path.append(str(Path(__file__).resolve().parent.parent))
+from scripts.s3_utils import upload_file 
 
 # ============================================================
 # CONFIGURATION
