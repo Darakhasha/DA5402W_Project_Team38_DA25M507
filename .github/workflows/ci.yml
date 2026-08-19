@@ -86,63 +86,63 @@ jobs:
       #       --set service.type=ClusterIP
 
       # Cross-platform Helm setup (Windows, Linux, macOS)
-      - name: Set up Helm
-        run: |
-          python -c "
-          import os, sys, shutil, urllib.request, zipfile, tarfile, platform
+      # - name: Set up Helm
+      #   run: |
+      #     python -c "
+      #     import os, sys, shutil, urllib.request, zipfile, tarfile, platform
 
-          if shutil.which('helm'):
-              print('Helm is already installed in PATH.')
-              sys.exit(0)
+      #     if shutil.which('helm'):
+      #         print('Helm is already installed in PATH.')
+      #         sys.exit(0)
 
-          system = platform.system().lower()
-          print(f'Helm not found. Downloading for {system}...')
+      #     system = platform.system().lower()
+      #     print(f'Helm not found. Downloading for {system}...')
 
-          if system == 'windows':
-              url = 'https://get.helm.sh/helm-v3.14.0-windows-amd64.zip'
-              archive = 'helm.zip'
-          elif system == 'darwin':
-              url = 'https://get.helm.sh/helm-v3.14.0-darwin-amd64.tar.gz'
-              archive = 'helm.tar.gz'
-          else:
-              url = 'https://get.helm.sh/helm-v3.14.0-linux-amd64.tar.gz'
-              archive = 'helm.tar.gz'
+      #     if system == 'windows':
+      #         url = 'https://get.helm.sh/helm-v3.14.0-windows-amd64.zip'
+      #         archive = 'helm.zip'
+      #     elif system == 'darwin':
+      #         url = 'https://get.helm.sh/helm-v3.14.0-darwin-amd64.tar.gz'
+      #         archive = 'helm.tar.gz'
+      #     else:
+      #         url = 'https://get.helm.sh/helm-v3.14.0-linux-amd64.tar.gz'
+      #         archive = 'helm.tar.gz'
 
-          urllib.request.urlretrieve(url, archive)
+      #     urllib.request.urlretrieve(url, archive)
 
-          if system == 'windows':
-              with zipfile.ZipFile(archive, 'r') as z:
-                  z.extract('windows-amd64/helm.exe', '.')
-              shutil.move('windows-amd64/helm.exe', 'helm.exe')
-              os.remove(archive)
-              shutil.rmtree('windows-amd64', ignore_errors=True)
-          else:
-              with tarfile.open(archive, 'r:gz') as t:
-                  t.extractall('.')
-              folder = f'{system}-amd64'
-              shutil.move(f'{folder}/helm', 'helm')
-              os.chmod('helm', 0o755)
-              os.remove(archive)
-              shutil.rmtree(folder, ignore_errors=True)
+      #     if system == 'windows':
+      #         with zipfile.ZipFile(archive, 'r') as z:
+      #             z.extract('windows-amd64/helm.exe', '.')
+      #         shutil.move('windows-amd64/helm.exe', 'helm.exe')
+      #         os.remove(archive)
+      #         shutil.rmtree('windows-amd64', ignore_errors=True)
+      #     else:
+      #         with tarfile.open(archive, 'r:gz') as t:
+      #             t.extractall('.')
+      #         folder = f'{system}-amd64'
+      #         shutil.move(f'{folder}/helm', 'helm')
+      #         os.chmod('helm', 0o755)
+      #         os.remove(archive)
+      #         shutil.rmtree(folder, ignore_errors=True)
 
-          # Add current workspace to GITHUB_PATH so subsequent steps find 'helm'
-          github_path = os.environ.get('GITHUB_PATH')
-          if github_path:
-              with open(github_path, 'a') as f:
-                  f.write(os.getcwd() + '\n')
+      #     # Add current workspace to GITHUB_PATH so subsequent steps find 'helm'
+      #     github_path = os.environ.get('GITHUB_PATH')
+      #     if github_path:
+      #         with open(github_path, 'a') as f:
+      #             f.write(os.getcwd() + '\n')
 
-          print('Helm successfully installed and added to PATH.')
-          "
+      #     print('Helm successfully installed and added to PATH.')
+      #     "
 
-      - name: Deploy MinIO
-        run: |
-          helm repo add minio https://charts.min.io/
-          helm repo update
-          helm uninstall minio || true
-          kubectl delete jobs -l app=minio --ignore-not-found
-          helm upgrade --install minio minio/minio --set rootUser="minioadmin" --set rootPassword="minioadmin" --set persistence.enabled=false --set service.type=ClusterIP --no-hooks
+      # - name: Deploy MinIO
+      #   run: |
+      #     helm repo add minio https://charts.min.io/
+      #     helm repo update
+      #     helm uninstall minio || true
+      #     kubectl delete jobs -l app=minio --ignore-not-found
+      #     helm upgrade --install minio minio/minio --set rootUser="minioadmin" --set rootPassword="minioadmin" --set persistence.enabled=false --set service.type=ClusterIP --no-hooks
 
-          
+
       - name: Verify MinIO rollout
         run: kubectl rollout status deployment/minio --timeout=120s
 
@@ -151,6 +151,17 @@ jobs:
 
       - name: Upload Artifacts to MinIO
         run: python scripts/upload_file.py  
+
+      - name: Deploy Ingestion CronJob
+        run: kubectl apply -f k8s/pipeline-1-ingestion.yaml
+
+      - name: Deploy Taxi Serving API
+        run: |
+          kubectl apply -f k8s/pipeline-3-serving.yaml
+          kubectl set image deployment/pipeline-3-serving serving-container=${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+
+      - name: Verify Taxi Serving rollout
+        run: kubectl rollout status deployment/pipeline-3-serving --timeout=120s  
 
       - name: Deploy deployment.yml
         run: kubectl apply -f k8s/deployment.yaml
