@@ -26,7 +26,7 @@ kind: Service
 metadata:
   name: taxi-serving-service
 spec:
-  type: LoadBalancer
+  type: NodePort #LoadBalancer
   ports:
   - port: 80
     targetPort: 8000

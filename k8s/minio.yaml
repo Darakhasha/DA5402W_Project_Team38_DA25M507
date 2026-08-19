@@ -43,7 +43,7 @@ kind: Service
 metadata:
   name: minio
 spec:
-  type: ClusterIP
+  type: NodePort #ClusterIP
   ports:
     - port: 9000
       targetPort: 9000
