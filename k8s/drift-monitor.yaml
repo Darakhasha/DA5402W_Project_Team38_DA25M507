@@ -17,6 +17,7 @@ spec:
         app: drift-monitor
 
     spec:
+      terminationGracePeriodSeconds: 5
       containers:
         - name: drift-monitor
 

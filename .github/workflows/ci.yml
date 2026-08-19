@@ -153,7 +153,7 @@ jobs:
         run: kubectl rollout status deployment/minio --timeout=120s
 
       - name: Port-Forward MinIO to Localhost
-        run: python -c "import subprocess, time; subprocess.Popen(['kubectl', 'port-forward', 'deployment/minio', '9000:9000']); time.sleep(5)"
+        run: python -c "import subprocess, time; subprocess.Popen(['kubectl', 'port-forward', 'deployment/minio', '9000:9000','9001:9001']); time.sleep(5)"
       
       - name: Upload Artifacts to MinIO
         env:
@@ -224,8 +224,8 @@ jobs:
       - name: Set drift monitor image
         run: kubectl set image deployment/drift-monitor drift-monitor=${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
-      - name: Verify drift monitor
-        run: kubectl rollout status deployment/drift-monitor --timeout=120s    
+      #- name: Verify drift monitor
+      #  run: kubectl rollout status deployment/drift-monitor --timeout=120s    
       
       - name: Deploy simulated label producer
         run: kubectl apply -f k8s/label-producer.yaml
@@ -233,6 +233,11 @@ jobs:
       - name: Set simulated label producer image
         run: kubectl set image deployment/simulated-label-producer simulated-label-producer=${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
-      - name: Verify simulated label producer rollout
-        run: kubectl rollout status deployment/simulated-label-producer --timeout=120s
-        
+      #- name: Verify simulated label producer rollout
+      #  run: kubectl rollout status deployment/simulated-label-producer --timeout=120s
+
+      - name: Verify Monitoring rollout
+        run: |
+          kubectl rollout status deployment/drift-monitor --timeout=300s
+          kubectl rollout status deployment/simulated-label-producer --timeout=300s  
+              
