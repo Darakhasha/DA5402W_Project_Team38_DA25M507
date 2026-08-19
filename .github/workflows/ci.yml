@@ -189,6 +189,7 @@ jobs:
        # shell: powershell
         run: |
           kubectl rollout status deployment/taxi-api --timeout=120s
+          
 
       - name: Verify deployed image
        # shell: powershell
@@ -210,11 +211,24 @@ jobs:
       - name: Deploy Kafka
         run: kubectl apply -f k8s/kafka.yaml
 
+      - name: Verify Kafka rollout
+        run: kubectl rollout status deployment/kafka --timeout=180s  
+  
+      - name: Create Kafka topic
+        run: |
+          kubectl exec deployment/kafka -- /opt/kafka/bin/kafka-topics.sh --create --if-not-exists --topic taxi-events --bootstrap-server kafka:9092 --partitions 1 --replication-factor 1  
+
+
       - name: Deploy Permanent Cloudflare Tunnels
         run: |
           kubectl apply -f k8s/cloudflared.yaml
           kubectl rollout status deployment/cloudflare-tunnels --timeout=60s
 
+     
+      - name: Verify MinIO rollout
+        run: |
+          kubectl rollout status deployment/minio --timeout=120s
+          kubectl wait --for=condition=ready pod -l app=minio --timeout=120s  
 
       - name: Download Train data from MinIO
         #env:
@@ -223,15 +237,8 @@ jobs:
         #  AWS_SECRET_ACCESS_KEY: "minioadmin"
         run: python -c "from scripts.s3_utils import download_file; import time; time.sleep(10) ; download_file('data-files','data/training_data.csv','dummy/training_data.csv')"
     
-                    
 
-      - name: Verify Kafka rollout
-        run: kubectl rollout status deployment/kafka --timeout=180s  
-
-      - name: Create Kafka topic
-        run: |
-          kubectl exec deployment/kafka -- /opt/kafka/bin/kafka-topics.sh --create --if-not-exists --topic taxi-events --bootstrap-server kafka:9092 --partitions 1 --replication-factor 1  
-
+      
       #- name: Deploy monitoring storage
       #  run: kubectl apply -f k8s/monitoring-storage.yaml
       
