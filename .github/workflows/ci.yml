@@ -152,11 +152,8 @@ jobs:
       - name: Verify MinIO rollout
         run: kubectl rollout status deployment/minio --timeout=120s
     
-      - name: Port-forward MinIO
-        shell: powershell
-        run: |
-          Start-Process kubectl -ArgumentList "port-forward", "svc/minio", "9000:9000" -NoNewWindow
-          Start-Sleep -Seconds 3
+      - name: Port-Forward MinIO to Localhost
+        run: python -c "import subprocess, time; subprocess.Popen(['kubectl', 'port-forward', 'svc/minio', '9000:9000']); time.sleep(5)"
 
       - name: Upload Artifacts to MinIO
         env:
