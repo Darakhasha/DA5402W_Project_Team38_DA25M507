@@ -157,7 +157,7 @@ jobs:
       
       - name: Upload Artifacts to MinIO
         env:
-          MINIO_ENDPOINT: "http://127.0.0.1:9001"
+          MINIO_ENDPOINT: "http://127.0.0.1:9000"
           AWS_ACCESS_KEY_ID: "minioadmin"
           AWS_SECRET_ACCESS_KEY: "minioadmin"
         run: python scripts/upload_file.py --bucket data-files --filepath dummy/training_data.csv --dest-path data/training_data.csv
@@ -248,6 +248,7 @@ jobs:
           python -c "
           import subprocess, time
           services = [
+              ['deployment/minio', '9001:9001'],
               ['deployment/pipeline-3-serving', '8000:8000'],
               ['deployment/prometheus', '9090:9090'],
               ['deployment/taxi-api', '8080:8080']
