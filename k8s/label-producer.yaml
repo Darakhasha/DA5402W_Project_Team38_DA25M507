@@ -17,7 +17,7 @@ spec:
       containers:
         - name: simulated-label-producer
           image: ghcr.io/owner/taxi-api:latest
-          command: ["python", "-u", "simulated_label_producer.py"]
+          command: ["python", "-u", "demo/simulated_label_producer.py"]
           envFrom:
             - secretRef:
                 name: minio-credentials
