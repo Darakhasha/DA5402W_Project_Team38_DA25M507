@@ -167,7 +167,7 @@ jobs:
           MINIO_ENDPOINT: "http://127.0.0.1:9000"
           AWS_ACCESS_KEY_ID: "minioadmin"
           AWS_SECRET_ACCESS_KEY: "minioadmin"
-        run: python -c "from scripts.s3_utils import download_file; download_file('data-files','data/training_data.csv''dummy/training_data.csv')"
+        run: python -c "from scripts.s3_utils import download_file; download_file('data-files','data/training_data.csv','dummy/training_data.csv')"
 
 
       - name: Deploy Ingestion CronJob
