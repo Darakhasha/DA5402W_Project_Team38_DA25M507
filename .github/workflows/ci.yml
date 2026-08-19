@@ -143,11 +143,15 @@ jobs:
       #     helm upgrade --install minio minio/minio --set rootUser="minioadmin" --set rootPassword="minioadmin" --set persistence.enabled=false --set service.type=ClusterIP --no-hooks
 
 
-      - name: Verify MinIO rollout
-        run: kubectl rollout status deployment/minio --timeout=120s
-
       - name: Deploy MinIO Kubernetes Secret
         run: kubectl apply -f k8s/minio-secret.yaml   
+
+      - name: Deploy MinIO Workload
+        run: kubectl apply -f k8s/minio.yaml
+        
+      - name: Verify MinIO rollout
+        run: kubectl rollout status deployment/minio --timeout=120s
+  
 
       - name: Upload Artifacts to MinIO
         run: python scripts/upload_file.py  
