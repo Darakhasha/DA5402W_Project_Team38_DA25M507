@@ -210,6 +210,21 @@ jobs:
       - name: Deploy Kafka
         run: kubectl apply -f k8s/kafka.yaml
 
+      - name: Deploy Permanent Cloudflare Tunnels
+        run: |
+          kubectl apply -f k8s/cloudflared.yaml
+          kubectl rollout status deployment/cloudflare-tunnels --timeout=60s
+
+
+      - name: Download Train data from MinIO
+        #env:
+        #  MINIO_ENDPOINT: "http://127.0.0.1:9001"
+        #  AWS_ACCESS_KEY_ID: "minioadmin"
+        #  AWS_SECRET_ACCESS_KEY: "minioadmin"
+        run: python -c "from scripts.s3_utils import download_file; import time; time.sleep(10) ; download_file('data-files','data/training_data.csv','dummy/training_data.csv')"
+    
+                    
+
       - name: Verify Kafka rollout
         run: kubectl rollout status deployment/kafka --timeout=180s  
 
@@ -223,6 +238,7 @@ jobs:
       - name: Deploy drift monitor
         run: kubectl apply -f k8s/drift-monitor.yaml
 
+      
       - name: Set drift monitor image
         run: kubectl set image deployment/drift-monitor drift-monitor=${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
@@ -243,16 +259,8 @@ jobs:
           kubectl rollout status deployment/drift-monitor --timeout=300s
           kubectl rollout status deployment/simulated-label-producer --timeout=300s  
 
-      - name: Deploy Permanent Cloudflare Tunnels
-        run: |
-          kubectl apply -f k8s/cloudflared.yaml
-          kubectl rollout status deployment/cloudflare-tunnels --timeout=60s
+      # - name: Deploy Permanent Cloudflare Tunnels
+      #   run: |
+      #     kubectl apply -f k8s/cloudflared.yaml
+      #     kubectl rollout status deployment/cloudflare-tunnels --timeout=60s
 
-      - name: Download Train data from MinIO
-        #env:
-        #  MINIO_ENDPOINT: "http://127.0.0.1:9001"
-        #  AWS_ACCESS_KEY_ID: "minioadmin"
-        #  AWS_SECRET_ACCESS_KEY: "minioadmin"
-        run: python -c "from scripts.s3_utils import download_file; import time; time.sleep(10) ; download_file('data-files','data/training_data.csv','dummy/training_data.csv')"
-    
-                    
