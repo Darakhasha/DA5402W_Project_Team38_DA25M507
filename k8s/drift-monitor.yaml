@@ -63,11 +63,11 @@ spec:
             - name: RMSE_THRESHOLD
               value: "75"
 
-          volumeMounts:
-            - name: monitoring-data
-              mountPath: /data
+          # volumeMounts:
+          #   - name: monitoring-data
+          #     mountPath: /data
 
-      volumes:
-        - name: monitoring-data
-          persistentVolumeClaim:
-            claimName: taxi-monitoring-data
+      # volumes:
+      #   - name: monitoring-data
+      #     persistentVolumeClaim:
+      #       claimName: taxi-monitoring-data
