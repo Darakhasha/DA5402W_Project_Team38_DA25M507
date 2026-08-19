@@ -47,6 +47,9 @@ spec:
             - name: INFERENCE_OUTPUT_FILE
               value: "/data/inference_data.csv"
 
+            - name: REFERENCE_PREDICTIONS
+              value: "/data/reference_predictions.csv"  
+
             - name: DRIFT_WINDOW_SIZE
               value: "10"
 

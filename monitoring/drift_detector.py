@@ -1,11 +1,13 @@
 import csv
 import json
 import math
-import os
+import os 
+import subprocess
+import sys
 from pathlib import Path
 
 from kafka import KafkaConsumer
-
+from s3_utils import upload_file 
 
 # ============================================================
 # CONFIGURATION
@@ -41,6 +43,21 @@ REFERENCE_PREDICTIONS = os.getenv(
     "dummy/reference_predictions.csv",
 )
 
+LOCAL_PATH =  os.getenv(
+                "DATA_LOCAL_PATH",
+                "dummy/",
+            )	
+
+OBJECT_NAME =  os.getenv(
+		"DATA_DEST_PATH",
+		"data/",
+	) 	
+
+BUCKET =  os.getenv(
+                        "DATA_BUCKET",
+                        "data-files",
+                    )
+
 DRIFT_WINDOW_SIZE = int(
     os.getenv(
         "DRIFT_WINDOW_SIZE",
@@ -55,7 +72,26 @@ PSI_THRESHOLD = float(
     )
 )
 
+PERFORMANCE_WINDOW_SIZE = int(
+    os.getenv(
+        "PERFORMANCE_WINDOW_SIZE",
+        "10",
+    )
+)
 
+MAE_THRESHOLD = float(
+    os.getenv(
+        "MAE_THRESHOLD",
+        "50",
+    )
+)
+
+RMSE_THRESHOLD = float(
+    os.getenv(
+        "RMSE_THRESHOLD",
+        "75",
+    )
+)
 # ============================================================
 # FEATURES
 # ============================================================
@@ -80,6 +116,7 @@ CSV_COLUMNS = [
     "prediction",
     "actual",
 ]
+
 
 
 def initialize_csv():
@@ -770,6 +807,176 @@ def create_consumer():
 
 
 # ============================================================
+# PREDICTION PERFORMANCE
+# ============================================================
+
+def calculate_prediction_performance():
+
+    if not Path(OUTPUT_FILE).exists():
+
+        print(
+            "[PERFORMANCE] Inference CSV not found",
+            flush=True,
+        )
+
+        return
+
+    predictions = []
+    actuals = []
+
+    with open(
+        OUTPUT_FILE,
+        "r",
+        newline="",
+        encoding="utf-8",
+    ) as file:
+
+        reader = csv.DictReader(file)
+
+        for row in reader:
+
+            prediction = row.get("prediction")
+            actual = row.get("actual")
+
+            # Only use records for which
+            # the real label has arrived.
+            if prediction in (None, ""):
+                continue
+
+            if actual in (None, ""):
+                continue
+
+            try:
+
+                predictions.append(
+                    float(prediction)
+                )
+
+                actuals.append(
+                    float(actual)
+                )
+
+            except (
+                ValueError,
+                TypeError,
+            ):
+
+                continue
+
+    if len(predictions) < PERFORMANCE_WINDOW_SIZE:
+
+        print(
+            f"[PERFORMANCE] Waiting for labels: "
+            f"{len(predictions)}/"
+            f"{PERFORMANCE_WINDOW_SIZE}",
+            flush=True,
+        )
+
+        return
+
+    # Use the most recent labeled observations
+    predictions = predictions[
+        -PERFORMANCE_WINDOW_SIZE:
+    ]
+
+    actuals = actuals[
+        -PERFORMANCE_WINDOW_SIZE:
+    ]
+
+    errors = []
+
+    squared_errors = []
+
+    for prediction, actual in zip(
+        predictions,
+        actuals,
+    ):
+
+        error = prediction - actual
+
+        errors.append(
+            abs(error)
+        )
+
+        squared_errors.append(
+            error ** 2
+        )
+
+    mae = (
+        sum(errors)
+        / len(errors)
+    )
+
+    rmse = math.sqrt(
+        sum(squared_errors)
+        / len(squared_errors)
+    )
+
+    print(
+        "",
+        flush=True,
+    )
+
+    print(
+        "========== PREDICTION PERFORMANCE ==========",
+        flush=True,
+    )
+
+    print(
+        f"Labeled samples: {len(predictions)}",
+        flush=True,
+    )
+
+    print(
+        f"MAE:  {mae:.4f}",
+        flush=True,
+    )
+
+    print(
+        f"RMSE: {rmse:.4f}",
+        flush=True,
+    )
+
+    print(
+        f"MAE threshold:  {MAE_THRESHOLD}",
+        flush=True,
+    )
+
+    print(
+        f"RMSE threshold: {RMSE_THRESHOLD}",
+        flush=True,
+    )
+
+    performance_degraded = (
+        mae > MAE_THRESHOLD
+        or rmse > RMSE_THRESHOLD
+    )
+
+    if performance_degraded:
+
+        print(
+            "!!! MODEL PERFORMANCE DEGRADED !!!",
+            flush=True,
+        )
+
+    else:
+
+        print(
+            "MODEL PERFORMANCE OK",
+            flush=True,
+        )
+
+    print(
+        "=============================================",
+        flush=True,
+    )
+
+    return {
+        "mae": mae,
+        "rmse": rmse,
+        "degraded": performance_degraded,
+    }
+# ============================================================
 # MAIN
 # ============================================================
 
@@ -963,6 +1170,8 @@ def main():
                     actual=actual,
                 )
 
+                calculate_prediction_performance()
+
             # ================================================
             # UNKNOWN EVENT
             # ================================================
@@ -975,6 +1184,23 @@ def main():
                     flush=True,
                 )
 
+            if os.path.exists(OUTPUT_FILE):
+               subprocess.run([
+                            sys.executable,
+                            "scripts/upload_flie.py",
+                            "--bucket", BUCKET,
+                            "--object-name", f"{OBJECT_NAME}/{OUTPUT_FILE.replace("\\", "/").split("/")[-1] }",
+                            "--file-path", f"{LOCAL_PATH}/{OUTPUT_FILE.replace("\\", "/").split("/")[-1] }"
+                        ], check=True)
+
+            if os.path.exists(REFERENCE_PREDICTIONS):
+                        subprocess.run([
+                                    sys.executable,
+                                    "scripts/upload_flie.py",
+                                    "--bucket", BUCKET,
+                                    "--object-name", f"{OBJECT_NAME}/{REFERENCE_PREDICTIONS.replace("\\", "/").split("/")[-1] }",
+                                    "--file-path", f"{LOCAL_PATH}/{REFERENCE_PREDICTIONS.replace("\\", "/").split("/")[-1] }"
+                                ], check=True)
         except Exception as error:
 
             print(
