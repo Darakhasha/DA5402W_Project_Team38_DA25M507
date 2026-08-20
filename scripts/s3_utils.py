@@ -5,7 +5,7 @@ import boto3
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://127.0.0.1:9000")
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "minioadmin")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "minioadmin")
-print(MINIO_ENDPOINT)
+print('EP:',MINIO_ENDPOINT,flush=True)
 s3_client = boto3.client(
     "s3",
     endpoint_url=MINIO_ENDPOINT,
@@ -16,6 +16,7 @@ s3_client = boto3.client(
 def upload_file(local_path, bucket, object_name):
     # Auto-create bucket if it doesn't exist
     try:
+        print('EP:',MINIO_ENDPOINT,flush=True)
         s3_client.head_bucket(Bucket=bucket)
     except Exception:
         s3_client.create_bucket(Bucket=bucket)

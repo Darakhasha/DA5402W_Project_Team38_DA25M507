@@ -988,6 +988,7 @@ def upload_gen_file(local_file_path,OBJECT_NAME,BUCKET):
     file_name = Path(local_file_path).name
     dest_path = f"{OBJECT_NAME.strip('/')}/{file_name}"
 
+    print('DT:',dest_path,flush=True)
     try:
         upload_file(
             local_path=local_file_path,

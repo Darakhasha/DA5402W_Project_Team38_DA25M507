@@ -29,6 +29,10 @@ spec:
             - python
             - monitoring/drift_detector.py
 
+          envFrom:
+            - secretRef:
+                name: minio-credentials  
+
           env:
             - name: KAFKA_BOOTSTRAP_SERVERS
               value: "kafka:9092"
