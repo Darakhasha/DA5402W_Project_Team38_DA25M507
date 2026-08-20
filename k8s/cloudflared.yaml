@@ -27,4 +27,4 @@ spec:
         args: ["tunnel", "--url", "http://prometheus.default.svc.cluster.local:9090"]
       - name: taxi-api-tunnel
         image: cloudflare/cloudflared:latest
-        args: ["tunnel", "--url", "http://taxi-api-service.default.svc.cluster.local:8000"]
+        args: ["tunnel","--protocol","http2",  "--url", "http://taxi-api-service.default.svc.cluster.local:8000"]
