@@ -5,7 +5,7 @@ import boto3
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://127.0.0.1:9000")
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "minioadmin")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "minioadmin")
-
+print(MINIO_ENDPOINT)
 s3_client = boto3.client(
     "s3",
     endpoint_url=MINIO_ENDPOINT,
