@@ -59,7 +59,7 @@ spec:
               value: "10"
 
             - name: PSI_THRESHOLD
-              value: "0.20"
+              value: "0.40"
 
             - name: MAE_THRESHOLD
               value: "50"
