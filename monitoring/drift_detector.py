@@ -369,9 +369,9 @@ def load_reference_predictions():
 def calculate_psi(
     reference_values,
     current_values,
-    bins=10,
+    bins=2,
 ):
-
+    print('Test')
     if not reference_values or not current_values:
         return None
 
