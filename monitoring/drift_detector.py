@@ -191,8 +191,8 @@ def load_reference_data():
 
 
 def load_reference_predictions():
-    download_from_minio("dummy/reference_predictions.csv", REFERENCE_PREDICTIONS)
-
+   # download_from_minio("dummy/reference_predictions.csv", REFERENCE_PREDICTIONS)
+    download_from_minio(REFERENCE_PREDICTIONS, REFERENCE_PREDICTIONS)
     path = Path(REFERENCE_PREDICTIONS)
     if not path.exists():
         return []

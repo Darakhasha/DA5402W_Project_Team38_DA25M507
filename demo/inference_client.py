@@ -1,6 +1,6 @@
 import argparse
+import datetime as dt
 import os
-import random
 import time
 import pandas as pd
 import requests
@@ -20,40 +20,30 @@ args = parser.parse_args()
 
 reference = pd.read_parquet(args.reference)
 
-TARGET = os.getenv("TARGET_COLUMN", "demand")
-EXCLUDED_COLUMNS = {"timestamp", TARGET}
-
-FEATURE_COLUMNS = [col for col in reference.columns if col not in EXCLUDED_COLUMNS]
-
-
 def generate_data(mode):
     row = reference.sample(n=1).iloc[0]
-    payload = {}
+    
+    # Extract Location ID (handles both PULocationID and location_id)
+    loc_id = int(row["PULocationID"]) if "PULocationID" in row else int(row.get("location_id", 1))
+    
+    # Base feature values
+    avg_dist = float(row.get("avg_trip_distance", 2.5))
+    avg_fare = float(row.get("avg_fare_amount", 15.0))
 
-    # 1. Feature Generation Logic
-    for column in FEATURE_COLUMNS:
-        value = row[column]
+    # Apply synthetic drift if requested
+    if mode in ["feature_drift", "all_drift"]:
+        avg_dist = float(avg_dist + 5 * (reference["avg_trip_distance"].std() or 1.0))
+        avg_fare = float(avg_fare + 5 * (reference["avg_fare_amount"].std() or 5.0))
 
-        # Shift features ONLY in 'feature_drift' and 'all_drift' modes
-        if mode in ["feature_drift", "all_drift"]:
-            if pd.api.types.is_numeric_dtype(reference[column]):
-                mean = reference[column].mean()
-                std = reference[column].std()
-                if pd.isna(std) or std == 0:
-                    std = 1.0
-                # Shift distribution by 5 standard deviations
-                payload[column] = float(mean + 5 * std)
-            else:
-                payload[column] = value.item() if hasattr(value, "item") else value
-        else:
-            # Normal features directly from reference dataset
-            payload[column] = value.item() if hasattr(value, "item") else value
-
-    # 2. Attach metadata signal so label producer knows the mode
-    payload["drift_mode"] = mode
+    # Construct payload matching app.schemas.PredictRequest
+    payload = {
+        "location_id": max(1, loc_id),
+        "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "avg_trip_distance": max(0.1, avg_dist),
+        "avg_fare_amount": max(1.0, avg_fare),
+    }
 
     return payload
-
 
 print(f"Starting Inference Client in [{args.mode.upper()}] mode...\n")
 

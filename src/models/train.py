@@ -29,8 +29,9 @@ def load_data():
     
     try:
         print("Loading parquet files from MinIO...")
+        # FIXED: Pointing directly to the correct nested path in MinIO
         df = pd.read_parquet(
-            "s3://data-files/processed/",
+            "s3://data-files/data/processed/taxi_demand_features.parquet",
             storage_options={
                 "key": os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin"),
                 "secret": os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin"),
@@ -89,7 +90,6 @@ def train_and_compare_models():
             model.fit(X_train, y_train)
             predictions = model.predict(X_test)
             
-            # Store XGBoost predictions as our baseline reference
             if "XGBoost" in model_name:
                 best_predictions = predictions
             
@@ -107,7 +107,6 @@ def train_and_compare_models():
                 
             print(f"{model_name} -> RMSE: {rmse:.4f}, MAE: {mae:.4f}, R2: {r2:.4f}")
 
-    # --- NEW: Save and Upload Real Reference Predictions ---
     if best_predictions is not None:
         pd.DataFrame({"prediction": best_predictions}).to_csv("reference_predictions.csv", index=False)
         
