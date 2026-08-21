@@ -5,11 +5,10 @@ metadata:
 spec:
   template:
     spec:
-      containers:
-      - name: training-container
+      initContainers:
+      - name: step-1-train
         image: taxi-api
-        # This runs INSIDE the Linux container, so 'sh' is perfectly safe.
-        command: ["sh", "-c",  "python src/models/train.py && python src/models/tune.py && python src/models/register_best_model.py"]
+        command: ["python", "src/models/train.py"]
         env:
         - name: MLFLOW_S3_ENDPOINT_URL
           value: "http://minio:9000"
@@ -18,5 +17,31 @@ spec:
         envFrom:
         - secretRef:
             name: minio-credentials
+
+      - name: step-2-tune
+        image: taxi-api
+        command: ["python", "src/models/tune.py"]
+        env:
+        - name: MLFLOW_S3_ENDPOINT_URL
+          value: "http://minio:9000"
+        - name: MLFLOW_TRACKING_URI
+          value: "http://mlflow:5000"
+        envFrom:
+        - secretRef:
+            name: minio-credentials
+
+      containers:
+      - name: step-3-register
+        image: taxi-api
+        command: ["python", "src/models/register_best_model.py"]
+        env:
+        - name: MLFLOW_S3_ENDPOINT_URL
+          value: "http://minio:9000"
+        - name: MLFLOW_TRACKING_URI
+          value: "http://mlflow:5000"
+        envFrom:
+        - secretRef:
+            name: minio-credentials
+
       restartPolicy: Never
   backoffLimit: 1

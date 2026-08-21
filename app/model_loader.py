@@ -56,9 +56,10 @@ _lock = threading.Lock()
 _loaded_model: Optional[LoadedModel] = None
 
 
-def _load_from_mlflow() -> LoadedModel:
+def _load_from_mlflow() -> Optional[LoadedModel]:
     """
     Load the model currently assigned to the champion alias.
+    Returns None gracefully if the model is not found yet.
     """
 
     try:
@@ -95,19 +96,16 @@ def _load_from_mlflow() -> LoadedModel:
         )
 
     except Exception as exc:
-        raise ModelNotLoadedError(
-            f"Could not load champion model "
-            f"'{MODEL_NAME}@{MODEL_ALIAS}' from MLflow. "
-            f"Tracking URI: {MLFLOW_TRACKING_URI}. "
-            f"Error: {exc}"
-        ) from exc
+        # Gracefully log instead of crashing on startup
+        print(f"Warning: Could not load champion model '{MODEL_NAME}@{MODEL_ALIAS}' yet: {exc}")
+        return None
 
 
-def get_model() -> LoadedModel:
+def get_model() -> Optional[LoadedModel]:
     """
     Return the cached champion model.
 
-    The model is loaded once and then kept in memory.
+    If not loaded yet, attempts to load it without raising a fatal error.
     """
 
     global _loaded_model
@@ -122,7 +120,7 @@ def get_model() -> LoadedModel:
     return _loaded_model
 
 
-def reload_model() -> LoadedModel:
+def reload_model() -> Optional[LoadedModel]:
     """
     Force Pipeline 3 to reload the current MLflow champion.
 

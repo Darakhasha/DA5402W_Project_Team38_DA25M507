@@ -2,6 +2,8 @@ import mlflow
 import os
 import sys
 from mlflow.tracking import MlflowClient
+import requests
+
 
 sys.path.append(os.path.dirname(__file__))
 from train import setup_mlflow
@@ -45,5 +47,20 @@ def register_best_model(experiment_name="Taxi_Demand_Forecasting_Comparison", mo
     )
     print(f"Successfully registered '{model_name}' Version {model_version.version} as '@champion'")
 
+def notify_api_reload():
+    # Use your Kubernetes internal service DNS name
+    api_url = os.getenv("API_RELOAD_URL", "http://taxi-api-service:8000/model/reload")
+    try:
+        print(f"Notifying API to hot-reload model at {api_url}...")
+        response = requests.post(api_url, timeout=15)
+        if response.status_code == 200:
+            print("API successfully hot-swapped the new champion model!")
+        else:
+            print(f"API reload returned status {response.status_code}: {response.text}")
+    except Exception as exc:
+        print(f"Could not reach API reload endpoint (API might still be starting): {exc}")
+
 if __name__ == "__main__":
     register_best_model()
+
+    notify_api_reload()

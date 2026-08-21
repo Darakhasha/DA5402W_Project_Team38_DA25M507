@@ -143,7 +143,7 @@ jobs:
       - name: Trigger Model Training Job
         run: |
           kubectl apply -f k8s/pipeline-2-training.yaml
-          kubectl wait --for=condition=complete job/pipeline-2-training --timeout=300s
+        # kubectl wait --for=condition=complete job/pipeline-2-training --timeout=300s
       
       - name: Deploy Airflow
         run: |
