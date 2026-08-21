@@ -149,7 +149,7 @@ jobs:
         run: |
           kubectl apply -f k8s/airflow.yaml
           kubectl set image deployment/airflow airflow=${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-          kubectl rollout status deployment/airflow --timeout=180s
+          kubectl rollout status deployment/airflow --timeout=300s
 
 
       - name: Deploy deployment.yml
