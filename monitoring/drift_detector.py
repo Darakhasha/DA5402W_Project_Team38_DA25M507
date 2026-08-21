@@ -24,7 +24,7 @@ REFERENCE_DATA = os.getenv(
     "REFERENCE_DATA", "data/processed/taxi_demand_features.parquet"
 )
 REFERENCE_PREDICTIONS = os.getenv(
-    "REFERENCE_PREDICTIONS", "dummy/reference_predictions.csv"
+    "REFERENCE_PREDICTIONS", "data/reference_predictions.csv"
 )
 
 OBJECT_NAME = os.getenv("DATA_DEST_PATH", "data/")
