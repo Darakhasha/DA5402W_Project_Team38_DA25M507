@@ -85,6 +85,7 @@ jobs:
         run: |
           kubectl apply -f k8s/minio-init-job.yaml
           kubectl wait --for=condition=complete job/minio-init-job --timeout=60s  
+          
 
       - name: Seed MinIO with Processed Data for CI Tests
         env:
@@ -109,7 +110,12 @@ jobs:
               subprocess.run(['dvc', 'remote', 'modify', 'minio-store', 'endpointurl', 'http://127.0.0.1:9000'], check=True)
               subprocess.run(['dvc', 'remote', 'modify', '--local', 'minio-store', 'access_key_id', access_key], check=True)
               subprocess.run(['dvc', 'remote', 'modify', '--local', 'minio-store', 'secret_access_key', secret_key], check=True)
-              subprocess.run(['dvc', 'pull'], check=True)
+              
+              # Try pulling from DVC, but don't fail the pipeline if the remote is initially empty
+              try:
+                  subprocess.run(['dvc', 'pull'], check=True)
+              except subprocess.CalledProcessError:
+                  print('Warning: DVC pull skipped or failed because remote storage is empty. Proceeding with raw data generation.')
               
               subprocess.run([sys.executable, 'scripts/process_data.py', '--input', 'data/raw/yellow_tripdata_2024-01.parquet', '--output', 'data/processed/taxi_demand_features.parquet'], check=True)
               subprocess.run([sys.executable, 'scripts/upload_file.py', '--bucket', 'data-files', '--filepath', 'data/processed/taxi_demand_features.parquet', '--dest-path', 'data/processed/taxi_demand_features.parquet'], check=True)
