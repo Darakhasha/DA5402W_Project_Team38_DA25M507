@@ -39,12 +39,14 @@ export MINIO_ENDPOINT="http://127.0.0.1:9000"
 export AWS_ACCESS_KEY_ID="minioadmin"
 export AWS_SECRET_ACCESS_KEY="minioadmin"
 
-dvc remote modify minio-store endpointurl http://127.0.0.1:9000
+dvc remote add -d minio-store s3://data-files --force
+dvc remote modify minio-store endpointurl "http://127.0.0.1:9000"
 dvc remote modify --local minio-store access_key_id minioadmin
 dvc remote modify --local minio-store secret_access_key minioadmin
 dvc pull || echo "No DVC data to pull yet."
 python scripts/process_data.py --input data/raw/yellow_tripdata_2024-01.parquet --output data/processed/taxi_demand_features.parquet --sample 0.2
 python scripts/upload_file.py --bucket data-files --filepath data/processed/taxi_demand_features.parquet --dest-path data/processed/taxi_demand_features.parquet
+python scripts/upload_file.py --bucket data-files --filepath data/raw/yellow_tripdata_2024-01.parquet --dest-path data/raw/yellow_tripdata_2024-01.parquet
 
 kill $PF_PID
 

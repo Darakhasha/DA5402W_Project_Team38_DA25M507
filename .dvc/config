@@ -2,4 +2,4 @@
     remote = minio-store
 ['remote "minio-store"']
     url = s3://data-files
-    endpointurl = http://minio.default.svc.cluster.local:9000
+    endpointurl = http://127.0.0.1:9000
