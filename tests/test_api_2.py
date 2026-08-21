@@ -22,14 +22,10 @@ def mock_mlflow_model():
         model_uri="models:/mock"
     )
     
-    with patch("app.model_loader.get_model", return_value=dummy_loaded_model):
+    # Patch where main.py actually imports and calls it
+    with patch("app.main.get_model", return_value=dummy_loaded_model):
         yield
 
-
-# @pytest.fixture(scope="session")
-# def client():
-#     from app.main import app
-#     return TestClient(app)
 
 @pytest.fixture(scope="session")
 def client(mock_mlflow_model):
