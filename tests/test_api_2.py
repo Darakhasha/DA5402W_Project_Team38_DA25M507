@@ -26,8 +26,13 @@ def mock_mlflow_model():
         yield
 
 
+# @pytest.fixture(scope="session")
+# def client():
+#     from app.main import app
+#     return TestClient(app)
+
 @pytest.fixture(scope="session")
-def client():
+def client(mock_mlflow_model):
     from app.main import app
     return TestClient(app)
 
