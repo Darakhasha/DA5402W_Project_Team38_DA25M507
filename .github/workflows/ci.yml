@@ -85,13 +85,13 @@ jobs:
         run: |
           kubectl apply -f k8s/minio-init-job.yaml
           kubectl wait --for=condition=complete job/minio-init-job --timeout=60s  
-          
+
 
       - name: Seed MinIO with Processed Data for CI Tests
         env:
-          MINIO_ENDPOINT: "http://127.0.0.1:9000"
-          AWS_ACCESS_KEY_ID: "minioadmin"
-          AWS_SECRET_ACCESS_KEY: "minioadmin"
+          MINIO_ENDPOINT:  "http://minio:9000" #"http://127.0.0.1:9000"
+          AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ACCESS_KEY }} 
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }} 
         run: |
           python -c "
           import os
