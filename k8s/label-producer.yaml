@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simulated-label-producer
+  labels:
+    app: simulated-label-producer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: simulated-label-producer
+  template:
+    metadata:
+      labels:
+        app: simulated-label-producer
+    spec:
+      containers:
+        - name: simulated-label-producer
+          image: taxi-api  #ghcr.io/owner/taxi-api:latest
+          command: ["python", "-u", "demo/simulated_label_producer.py"]
+          envFrom:
+            - secretRef:
+                name: minio-credentials
+          env:
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: "kafka:9092"
+            - name: KAFKA_TOPIC
+              value: "taxi-events"
+            - name: LABEL_DELAY_SECONDS
+              value: "2"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"

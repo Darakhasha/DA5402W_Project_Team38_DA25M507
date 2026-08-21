@@ -1,4 +1,5 @@
 [core]
-    remote = mylocalremote
-['remote "mylocalremote"']
-    url = /tmp/dvc-storage
+    remote = minio-store
+['remote "minio-store"']
+    url = s3://data-files
+    endpointurl = http://minio.default.svc.cluster.local:9000

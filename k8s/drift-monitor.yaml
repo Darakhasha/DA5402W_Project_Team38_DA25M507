@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: drift-monitor
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: drift-monitor
+
+  template:
+    metadata:
+      labels:
+        app: drift-monitor
+
+    spec:
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: drift-monitor
+
+          image: taxi-api:placeholder
+
+          imagePullPolicy: Always
+
+          command:
+            - python
+            - monitoring/drift_detector.py
+
+          envFrom:
+            - secretRef:
+                name: minio-credentials  
+
+          env:
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: "kafka:9092"
+
+            - name: KAFKA_TOPIC
+              value: "taxi-events"
+
+            - name: KAFKA_GROUP_ID
+              value: "taxi-monitoring"
+
+            - name: REFERENCE_DATA
+              value: "dummy/training_data.csv"
+
+            - name: TARGET_COLUMN
+              value: "taxi_demand"
+
+            - name: INFERENCE_OUTPUT_FILE
+              value: "/data/inference_data.csv"
+
+            - name: REFERENCE_PREDICTIONS
+              value: "/data/reference_predictions.csv"  
+
+            - name: DRIFT_WINDOW_SIZE
+              value: "10"
+
+            - name: PSI_THRESHOLD
+              value: "0.40"
+
+            - name: MAE_THRESHOLD
+              value: "50"
+
+            - name: RMSE_THRESHOLD
+              value: "75"
+
+          # volumeMounts:
+          #   - name: monitoring-data
+          #     mountPath: /data
+
+      # volumes:
+      #   - name: monitoring-data
+      #     persistentVolumeClaim:
+      #       claimName: taxi-monitoring-data

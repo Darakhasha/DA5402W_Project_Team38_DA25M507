@@ -1,0 +1,17 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-init-job
+spec:
+  ttlSecondsAfterFinished: 60
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: minio-mc
+          image: minio/mc
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mc alias set myminio http://minio.default.svc.cluster.local:9000 minioadmin minioadmin
+              mc mb --ignore-existing myminio/data-files

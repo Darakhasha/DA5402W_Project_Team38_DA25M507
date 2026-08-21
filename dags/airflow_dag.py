@@ -4,6 +4,7 @@ from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import BranchPythonOperator
 from airflow.utils.task_group import TaskGroup
+from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 
 # Default operational parameters for DAG tasks
 default_args = {
@@ -19,7 +20,7 @@ default_args = {
 with DAG(
     'zeba_data_engineering_pipeline',
     default_args=default_args,
-    schedule_interval='*/5 * * * *', # Cron expression for 'Every 5 minutes'
+    schedule_interval='@daily', #'*/5 * * * *', # Cron expression for 'Every 5 minutes'
     catchup=False
 ) as dag:
 
@@ -33,7 +34,17 @@ with DAG(
     # Helper Python function to validate that raw files are present on disk
     def validate_ingested_file():
         # Verifies if the dataset exist inside our project raw folder
-        if os.path.exists('data/yellow_tripdata_2024-01.parquet'):
+        # if os.path.exists('data/yellow_tripdata_2024-01.parquet'):
+        #     return 'processing_group.DataPreprocessing'
+        # else:
+        #     return 'Data_Validation_Failed'
+
+        s3_hook = S3Hook(aws_conn_id='minio_default') # Ensure you set this connection in Airflow UI
+        file_exists = s3_hook.check_for_key(
+            key='data/yellow_tripdata_2024-01.parquet',
+            bucket_name='data-files'
+        )
+        if file_exists:
             return 'processing_group.DataPreprocessing'
         else:
             return 'Data_Validation_Failed'

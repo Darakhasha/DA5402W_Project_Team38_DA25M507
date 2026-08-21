@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: taxi-api
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: taxi-api
+
+  template:
+    metadata:
+      labels:
+        app: taxi-api
+
+    spec:
+      imagePullSecrets:
+        - name: ghcr-secret
+      containers:
+        - name: taxi-api
+          image: taxi-api
+          imagePullPolicy: Always #IfNotPresent
+
+          ports:
+            - containerPort: 8000

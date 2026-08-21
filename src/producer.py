@@ -42,7 +42,7 @@ for index, row in df_sample.iterrows():
     print(f"Sent Event -> Zone: {data['PULocationID']}, Time: {data['tpep_pickup_datetime']}, Fare: ${data['fare_amount']:.2f}")
     
     # Introduce a 0.5-second sleep interval to simulate live incoming data [5]
-    time.sleep(0.5)
+    time.sleep(0.01) #(0.5)
 
 # Ensure all messages are flushed to the broker before disconnecting
 producer.flush()

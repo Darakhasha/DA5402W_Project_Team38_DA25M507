@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pipeline-3-serving
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: taxi-serving
+  template:
+    metadata:
+      labels:
+        app: taxi-serving
+    spec:
+      containers:
+      - name: serving-container
+        image: taxi-api
+        ports:
+        - containerPort: 8000
+        envFrom:
+        - secretRef:
+            name: minio-credentials
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: taxi-serving-service
+spec:
+  type: NodePort #LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 8000
+    #nodePort: 30800
+  selector:
+    app: taxi-serving

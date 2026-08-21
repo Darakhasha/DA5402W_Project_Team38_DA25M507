@@ -1,0 +1,17 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pipeline-1-ingestion
+spec:
+  schedule: "0 * * * *"  # Runs every 1 hr
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: ingestion-container
+            image: taxi-api 
+            envFrom:
+            - secretRef:
+                name: minio-credentials
+          restartPolicy: OnFailure
