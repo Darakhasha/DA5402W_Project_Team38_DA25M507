@@ -4,6 +4,7 @@ import numpy as np
 import mlflow
 import mlflow.sklearn
 import mlflow.xgboost
+import boto3
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from xgboost import XGBRegressor
@@ -26,7 +27,6 @@ def setup_mlflow():
 def load_data():
     local_path = "data/processed/taxi_demand_features.parquet"
     
-    # Try MinIO/S3 first, fallback to local path
     try:
         print("Loading parquet files from MinIO...")
         df = pd.read_parquet(
@@ -41,7 +41,6 @@ def load_data():
         print(f"MinIO read failed ({exc}). Loading local file {local_path}...")
         df = pd.read_parquet(local_path)
     
-    # Auto-repair missing feature columns if needed
     if 'hour_of_day' in df.columns:
         if 'sin_hour' not in df.columns:
             df['sin_hour'] = np.sin(2 * np.pi * df['hour_of_day'] / 24.0)
@@ -82,15 +81,19 @@ def train_and_compare_models():
         "XGBoost_Regressor": XGBRegressor(n_estimators=150, learning_rate=0.05, max_depth=6, random_state=42)
     }
     
-    results = {}
+    best_predictions = None
+
     for model_name, model in models.items():
         with mlflow.start_run(run_name=model_name):
             print(f"--- Training {model_name} ---")
             model.fit(X_train, y_train)
             predictions = model.predict(X_test)
             
+            # Store XGBoost predictions as our baseline reference
+            if "XGBoost" in model_name:
+                best_predictions = predictions
+            
             rmse, mae, r2 = eval_metrics(y_test, predictions)
-            results[model_name] = {"RMSE": rmse, "MAE": mae, "R2": r2}
             
             mlflow.log_params(model.get_params() if hasattr(model, 'get_params') else {})
             mlflow.log_metric("rmse", rmse)
@@ -103,6 +106,22 @@ def train_and_compare_models():
                 mlflow.sklearn.log_model(model, artifact_path="model")
                 
             print(f"{model_name} -> RMSE: {rmse:.4f}, MAE: {mae:.4f}, R2: {r2:.4f}")
+
+    # --- NEW: Save and Upload Real Reference Predictions ---
+    if best_predictions is not None:
+        pd.DataFrame({"prediction": best_predictions}).to_csv("reference_predictions.csv", index=False)
+        
+        try:
+            s3 = boto3.client(
+                "s3", 
+                endpoint_url=os.environ.get("MLFLOW_S3_ENDPOINT_URL", "http://minio:9000"),
+                aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin"),
+                aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin")
+            )
+            s3.upload_file("reference_predictions.csv", "data-files", "data/reference_predictions.csv")
+            print("Uploaded real reference predictions to MinIO.")
+        except Exception as e:
+            print(f"Failed to upload reference predictions to MinIO: {e}")
 
 if __name__ == "__main__":
     train_and_compare_models()

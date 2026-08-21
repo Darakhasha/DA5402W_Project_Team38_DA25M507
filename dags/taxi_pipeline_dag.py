@@ -40,7 +40,7 @@ with DAG(
     # 3. Run Spark batch aggregation on Kafka stream
     task_spark_batch = BashOperator(
         task_id='run_spark_batch_aggregation',
-        bash_command='python scripts/streaming_pipeline.py',
+        bash_command='python src/streaming_pipeline.py',
     )
 
     # 4. Version final processed dataset with DVC and push to MinIO

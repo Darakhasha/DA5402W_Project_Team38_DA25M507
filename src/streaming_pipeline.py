@@ -29,14 +29,14 @@ KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 raw_df = spark.read \
     .format("kafka") \
     .option("kafka.bootstrap.servers", KAFKA_BOOTSTRAP_SERVERS) \
-    .option("subscribe", "taxi_demand_stream") \
+    .option("subscribe", "taxi-events") \
     .option("startingOffsets", "earliest") \
     .option("endingOffsets", "latest") \
     .load()
 
 parsed_df = raw_df.selectExpr("CAST(value AS STRING)") \
     .select(from_json(col("value"), taxi_schema).alias("data")) \
-    .select("data.*")
+    .select("data.*").limit(50000)
 
 # Clean outlier records
 cleaned_df = parsed_df.filter(

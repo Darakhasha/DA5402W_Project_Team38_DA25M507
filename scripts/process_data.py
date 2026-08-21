@@ -3,13 +3,19 @@ import os
 import numpy as np
 import pandas as pd
 
-def clean_and_engineer(input_path: str, output_path: str):
+def clean_and_engineer(input_path: str, output_path: str, sample_frac: float = None):
     print(f"Loading raw dataset from {input_path}...")
 
     if input_path.endswith('.parquet'):
         df = pd.read_parquet(input_path)
     else:
         df = pd.read_csv(input_path, nrows=500000)
+
+    # --- NEW: Safe Demo Sampling ---
+    if sample_frac is not None:
+        print(f"Applying {sample_frac*100}% sample for safe execution...")
+        df = df.sample(frac=sample_frac, random_state=42)
+        print(f"Downsampled row count: {len(df):,}")
 
     # Primary pickup timestamp column from official schema
     datetime_col = 'tpep_pickup_datetime' if 'tpep_pickup_datetime' in df.columns else None
@@ -63,5 +69,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--input', type=str, default='data/raw/yellow_tripdata_2024-01.parquet')
     parser.add_argument('--output', type=str, default='data/processed/taxi_demand_features.parquet')
+    
+    # --- NEW: Sample argument added to the parser ---
+    parser.add_argument('--sample', type=float, default=0.2, help="Fraction of data to sample (e.g. 0.05 for 5%)")
+    
     args = parser.parse_args()
-    clean_and_engineer(args.input, args.output)
+    
+    # Pass the sample argument to the function
+    clean_and_engineer(args.input, args.output, args.sample)

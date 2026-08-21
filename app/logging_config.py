@@ -4,9 +4,9 @@ Structured logging for Darshita's deployment pipeline.
 - app_logger  -> human-readable service logs (startup, errors, model reloads) -> logs/app.log
 - pred_logger -> one JSON line per prediction request/response -> logs/predictions.log
 
-Darakhasha's monitoring pipeline (Pipeline 4) can tail predictions.log, join the
-logged (location_id, timestamp, predicted_value) rows against Zeba's actual-demand
-stream on a delay, and compute live MAE/RMSE + drift metrics from it.
+NOTE: Monitoring (Pipeline 4) operates via Kafka streams (topic: taxi-events) 
+rather than tailing these log files directly. The local files are retained purely 
+for local debugging and fallback auditability.
 """
 from __future__ import annotations
 

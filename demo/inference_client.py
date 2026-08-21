@@ -14,13 +14,13 @@ parser.add_argument(
     default="normal",
     help="Select the test case to simulate.",
 )
-parser.add_argument("--reference", default="dummy/training_data.csv")
+parser.add_argument("--reference", default="data/processed/taxi_demand_features.parquet")
 
 args = parser.parse_args()
 
-reference = pd.read_csv(args.reference)
+reference = pd.read_parquet(args.reference)
 
-TARGET = os.getenv("TARGET_COLUMN", "taxi_demand")
+TARGET = os.getenv("TARGET_COLUMN", "demand")
 EXCLUDED_COLUMNS = {"timestamp", TARGET}
 
 FEATURE_COLUMNS = [col for col in reference.columns if col not in EXCLUDED_COLUMNS]

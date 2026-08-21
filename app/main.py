@@ -203,7 +203,7 @@ def predict(payload: PredictRequest):
         publish_inference(
             request_id=request_id,
             timestamp=timestamp.isoformat(),
-            features=payload.model_dump(mode="json"),
+            features=features_df.to_dict(orient="records")[0],
             prediction=predicted_demand,
         )
     except Exception as exc:

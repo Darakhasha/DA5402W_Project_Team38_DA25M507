@@ -8,23 +8,15 @@ spec:
       containers:
       - name: training-container
         image: taxi-api
-        command: ["python", "scripts/train.py"]
+        # This runs INSIDE the Linux container, so 'sh' is perfectly safe.
+        command: ["sh", "-c",  "python src/models/train.py && python src/models/tune.py && python src/models/register_best_model.py"]
         env:
-        # Tell MLflow to use MinIO for Artifacts
         - name: MLFLOW_S3_ENDPOINT_URL
           value: "http://minio:9000"
-        # Tell MLflow to use Postgres for the Model Registry Metadata
         - name: MLFLOW_TRACKING_URI
-          value: "postgresql://airflow:airflow@airflow-postgres:5432/airflow"
-        - name: AWS_ACCESS_KEY_ID
-          valueFrom:
-            secretKeyRef:
-              name: minio-credentials
-              key: accesskey
-        - name: AWS_SECRET_ACCESS_KEY
-          valueFrom:
-            secretKeyRef:
-              name: minio-credentials
-              key: secretkey
+          value: "http://mlflow:5000"
+        envFrom:
+        - secretRef:
+            name: minio-credentials
       restartPolicy: Never
   backoffLimit: 1

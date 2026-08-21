@@ -3,7 +3,7 @@ kind: CronJob
 metadata:
   name: pipeline-1-ingestion
 spec:
-  schedule: "0 * * * *"  # Runs every 1 hr
+  schedule: "0 * * * *"
   jobTemplate:
     spec:
       template:
@@ -11,7 +11,11 @@ spec:
           containers:
           - name: ingestion-container
             image: taxi-api 
+            command: ["python", "src/producer.py"]
             envFrom:
             - secretRef:
                 name: minio-credentials
+            env:
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: "kafka:9092"
           restartPolicy: OnFailure

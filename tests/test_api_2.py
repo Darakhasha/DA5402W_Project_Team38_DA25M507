@@ -12,21 +12,29 @@ import sys
 
 import pytest
 from fastapi.testclient import TestClient
+from unittest.mock import patch
+from app.model_loader import LoadedModel
 
 # Prevent Kafka connections from hanging test runs
 os.environ["TESTING"] = "true"
 
 
 @pytest.fixture(scope="session", autouse=True)
-def ensure_model_trained():
-    os.makedirs("models", exist_ok=True)
-    os.makedirs("logs", exist_ok=True)
+def mock_mlflow_model():
+    """Mock the model loader for unit testing the API endpoints."""
+    class DummyModel:
+        def predict(self, df):
+            return [42.0] * len(df)
 
-    if not os.path.exists("models/model.joblib"):
-        train_script = "train_model.py" if os.path.exists("train_model.py") else "src/models/train.py"
-        if os.path.exists(train_script):
-            subprocess.run([sys.executable, train_script], check=True)
-    yield
+    dummy_loaded_model = LoadedModel(
+        model=DummyModel(),
+        model_name="TaxiDemandModel",
+        model_version="v1",
+        model_uri="models:/mock"
+    )
+    
+    with patch("app.main.get_model", return_value=dummy_loaded_model):
+        yield
 
 
 @pytest.fixture(scope="session")

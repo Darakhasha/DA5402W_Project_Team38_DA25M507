@@ -73,78 +73,7 @@ jobs:
       - name: Push Docker image
         run: |
           docker push  ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-
-      # - name: Deploy MinIO
-      #   shell: bash
-      #   run: |
-      #     helm repo add minio https://charts.min.io/
-      #     helm repo update
-      #     helm upgrade --install minio minio/minio \
-      #       --set rootUser="minioadmin" \
-      #       --set rootPassword="minioadmin" \
-      #       --set persistence.size=10Gi \
-      #       --set service.type=ClusterIP
-
-      # Cross-platform Helm setup (Windows, Linux, macOS)
-      # - name: Set up Helm
-      #   run: |
-      #     python -c "
-      #     import os, sys, shutil, urllib.request, zipfile, tarfile, platform
-
-      #     if shutil.which('helm'):
-      #         print('Helm is already installed in PATH.')
-      #         sys.exit(0)
-
-      #     system = platform.system().lower()
-      #     print(f'Helm not found. Downloading for {system}...')
-
-      #     if system == 'windows':
-      #         url = 'https://get.helm.sh/helm-v3.14.0-windows-amd64.zip'
-      #         archive = 'helm.zip'
-      #     elif system == 'darwin':
-      #         url = 'https://get.helm.sh/helm-v3.14.0-darwin-amd64.tar.gz'
-      #         archive = 'helm.tar.gz'
-      #     else:
-      #         url = 'https://get.helm.sh/helm-v3.14.0-linux-amd64.tar.gz'
-      #         archive = 'helm.tar.gz'
-
-      #     urllib.request.urlretrieve(url, archive)
-
-      #     if system == 'windows':
-      #         with zipfile.ZipFile(archive, 'r') as z:
-      #             z.extract('windows-amd64/helm.exe', '.')
-      #         shutil.move('windows-amd64/helm.exe', 'helm.exe')
-      #         os.remove(archive)
-      #         shutil.rmtree('windows-amd64', ignore_errors=True)
-      #     else:
-      #         with tarfile.open(archive, 'r:gz') as t:
-      #             t.extractall('.')
-      #         folder = f'{system}-amd64'
-      #         shutil.move(f'{folder}/helm', 'helm')
-      #         os.chmod('helm', 0o755)
-      #         os.remove(archive)
-      #         shutil.rmtree(folder, ignore_errors=True)
-
-      #     # Add current workspace to GITHUB_PATH so subsequent steps find 'helm'
-      #     github_path = os.environ.get('GITHUB_PATH')
-      #     if github_path:
-      #         with open(github_path, 'a') as f:
-      #             f.write(os.getcwd() + '\n')
-
-      #     print('Helm successfully installed and added to PATH.')
-      #     "
-
-      # - name: Deploy MinIO
-      #   run: |
-      #     helm repo add minio https://charts.min.io/
-      #     helm repo update
-      #     helm uninstall minio || true
-      #     kubectl delete jobs -l app=minio --ignore-not-found
-      #     helm upgrade --install minio minio/minio --set rootUser="minioadmin" --set rootPassword="minioadmin" --set persistence.enabled=false --set service.type=ClusterIP --no-hooks
-
-
-      - name: Deploy MinIO Kubernetes Secret
-        run: kubectl apply -f k8s/minio-secret.yaml   
+ 
 
       - name: Deploy MinIO Workload
         run: kubectl apply -f k8s/minio.yaml
@@ -157,47 +86,64 @@ jobs:
           kubectl apply -f k8s/minio-init-job.yaml
           kubectl wait --for=condition=complete job/minio-init-job --timeout=60s  
 
-      #- name: Port-Forward MinIO to Localhost
-      #  run: python -c "import subprocess, time; subprocess.Popen(['kubectl', 'port-forward', 'deployment/minio', '9000:9000','9001:9001']); time.sleep(5)"
-      
-      # - name: Upload Artifacts to MinIO
-      #   env:
-      #     MINIO_ENDPOINT: "http://127.0.0.1:9000"
-      #     AWS_ACCESS_KEY_ID: "minioadmin"
-      #     AWS_SECRET_ACCESS_KEY: "minioadmin"
-      #   run: python scripts/upload_file.py --bucket data-files --filepath dummy/training_data.csv --dest-path data/training_data.csv
+      - name: Seed MinIO with Processed Data for CI Tests
+        env:
+          MINIO_ENDPOINT: "http://127.0.0.1:9000"
+          AWS_ACCESS_KEY_ID: "minioadmin"
+          AWS_SECRET_ACCESS_KEY: "minioadmin"
+        run: |
+          python -c "
+          import os
+          import subprocess
+          import time
+          import sys
+
+          print('Starting MinIO port-forwarding...')
+          pf_process = subprocess.Popen(['kubectl', 'port-forward', 'deployment/minio', '9000:9000'])
+          time.sleep(5) 
+
+          try:
+              access_key = os.environ.get('AWS_ACCESS_KEY_ID')
+              secret_key = os.environ.get('AWS_SECRET_ACCESS_KEY')
+
+              subprocess.run(['dvc', 'remote', 'modify', 'minio-store', 'endpointurl', 'http://127.0.0.1:9000'], check=True)
+              subprocess.run(['dvc', 'remote', 'modify', '--local', 'minio-store', 'access_key_id', access_key], check=True)
+              subprocess.run(['dvc', 'remote', 'modify', '--local', 'minio-store', 'secret_access_key', secret_key], check=True)
+              subprocess.run(['dvc', 'pull'], check=True)
+              
+              subprocess.run([sys.executable, 'scripts/process_data.py', '--input', 'data/raw/yellow_tripdata_2024-01.parquet', '--output', 'data/processed/taxi_demand_features.parquet'], check=True)
+              subprocess.run([sys.executable, 'scripts/upload_file.py', '--bucket', 'data-files', '--filepath', 'data/processed/taxi_demand_features.parquet', '--dest-path', 'data/processed/taxi_demand_features.parquet'], check=True)
+          finally:
+              pf_process.terminate()
+              pf_process.wait()
+          "
+
 
       - name: Deploy Ingestion CronJob
         run: |
           kubectl apply -f k8s/pipeline-1-ingestion.yaml
           kubectl set image cronjob/pipeline-1-ingestion ingestion-container=${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
-      - name: Trigger Model Training Job
-        run: |
-          kubectl apply -f k8s/pipeline-2-training.yaml
-          kubectl wait --for=condition=complete job/pipeline-2-training --timeout=300s
-      
-      - name: Deploy Taxi Serving API
-        run: |
-          kubectl apply -f k8s/pipeline-3-serving.yaml
-          kubectl set image deployment/pipeline-3-serving serving-container=${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-
-      - name: Verify Taxi Serving rollout
-        run: kubectl rollout status deployment/pipeline-3-serving --timeout=120s  
-        
-
       - name: Deploy Postgres Metastore
         run: |
           kubectl apply -f k8s/postgres.yaml
           kubectl rollout status deployment/airflow-postgres --timeout=120s
 
+      - name: Deploy MLflow
+        run: |
+          kubectl apply -f k8s/mlflow.yaml
+          kubectl rollout status deployment/mlflow --timeout=120s
+
+      - name: Trigger Model Training Job
+        run: |
+          kubectl apply -f k8s/pipeline-2-training.yaml
+          kubectl wait --for=condition=complete job/pipeline-2-training --timeout=300s
+      
       - name: Deploy Airflow
         run: |
           kubectl apply -f k8s/airflow.yaml
           kubectl set image deployment/airflow airflow=${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-
-      - name: Verify Airflow rollout
-        run: kubectl rollout status deployment/airflow --timeout=180s    
+          kubectl rollout status deployment/airflow --timeout=180s
 
 
       - name: Deploy deployment.yml
@@ -254,18 +200,6 @@ jobs:
           kubectl apply -f k8s/cloudflared.yaml
           kubectl rollout status deployment/cloudflare-tunnels --timeout=60s
   
-
-      - name: Download Train data from MinIO
-        #env:
-        #  MINIO_ENDPOINT: "http://127.0.0.1:9000"
-        #  AWS_ACCESS_KEY_ID: "minioadmin"
-        #  AWS_SECRET_ACCESS_KEY: "minioadmin"
-        run: python -c "from scripts.s3_utils import download_file; import time; time.sleep(10) ; download_file('data-files','data/training_data.csv','dummy/training_data.csv')"
-    
-
-      
-      #- name: Deploy monitoring storage
-      #  run: kubectl apply -f k8s/monitoring-storage.yaml
       
       - name: Deploy drift monitor
         run: kubectl apply -f k8s/drift-monitor.yaml

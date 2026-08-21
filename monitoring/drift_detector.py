@@ -104,11 +104,20 @@ def initialize_csv():
     output_path = Path(OUTPUT_FILE)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # 1. NEW: Try to restore existing state from MinIO first
+    dest_object = f"{OBJECT_NAME.rstrip('/')}/{output_path.name}"
+    restored = download_from_minio(dest_object, str(output_path))
+    
+    if restored and output_path.exists():
+        print(f"[CSV] Restored historical state from MinIO: {dest_object}", flush=True)
+        return
+
+    # 2. Only create a blank file if no history exists in MinIO
     if not output_path.exists():
         with output_path.open("w", newline="", encoding="utf-8") as file:
             writer = csv.DictWriter(file, fieldnames=CSV_COLUMNS)
             writer.writeheader()
-        print(f"[CSV] Created: {OUTPUT_FILE}", flush=True)
+        print(f"[CSV] Created fresh baseline file: {OUTPUT_FILE}", flush=True)
         upload_to_minio(OUTPUT_FILE)
 
 

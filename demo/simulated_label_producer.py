@@ -45,9 +45,9 @@ for message in consumer:
     time.sleep(LABEL_DELAY_SECONDS)
 
     if drift_mode in ["performance_drift", "all_drift"]:
-        actual = prediction + random.randint(80, 120)
+        actual = max(0, prediction + random.randint(80, 120))
     else:
-        actual = prediction + random.randint(-5, 5)
+        actual = max(0, prediction + random.randint(-5, 5))
 
     feedback_event = {
         "event_type": "feedback",

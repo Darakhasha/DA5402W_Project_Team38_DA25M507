@@ -7,9 +7,7 @@ import pandas as pd
 from xgboost import XGBRegressor
 from sklearn.metrics import mean_squared_error
 
-# Add current directory to path for clean imports
 sys.path.append(os.path.dirname(__file__))
-# CHANGED: Added setup_mlflow to the import list
 from train import load_data, setup_mlflow
 
 def objective(trial):
@@ -32,14 +30,19 @@ def objective(trial):
         
         mlflow.log_params(params)
         mlflow.log_metric("val_rmse", rmse)
+        mlflow.log_metric("rmse", rmse)  # Log as 'rmse' so register_best_model.py can compare it apples-to-apples with train.py
+        
+        # FIXED: Actually log the model artifact so it can be registered!
+        mlflow.xgboost.log_model(model, artifact_path="model")
         
     return rmse
 
 def run_tuning(n_trials: int = 10):
-    # CHANGED: Initialize MLflow with MinIO and SQLite settings before running
     setup_mlflow()
     
-    mlflow.set_experiment("Taxi_Demand_Hyperparameter_Tuning")
+    # FIXED: Point to the same experiment as train.py
+    mlflow.set_experiment("Taxi_Demand_Forecasting_Comparison")
+    
     with mlflow.start_run(run_name="Optuna_XGBoost_Study"):
         study = optuna.create_study(direction="minimize")
         study.optimize(objective, n_trials=n_trials)

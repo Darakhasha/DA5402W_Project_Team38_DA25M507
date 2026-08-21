@@ -7,6 +7,7 @@ from kafka import KafkaProducer
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 
 print("Connecting to Kafka broker...")
+
 producer = KafkaProducer(
     bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
     value_serializer=lambda v: json.dumps(v).encode('utf-8')
@@ -15,6 +16,7 @@ producer = KafkaProducer(
 topic_name = 'taxi_demand_stream'
 
 file_path = 'data/raw/yellow_tripdata_2024-01.parquet'
+
 if not os.path.exists(file_path):
     file_path = 'data/raw/yellow_tripdata_2015-01.csv'
 if not os.path.exists(file_path):

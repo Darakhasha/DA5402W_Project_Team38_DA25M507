@@ -16,12 +16,7 @@ spec:
       - name: minio-tunnel
         image: cloudflare/cloudflared:latest
         args: ["tunnel","--protocol","http2", "--url", "http://minio.default.svc.cluster.local:9001"] # K8s Service Name:Port
-     # - name: kafka-tunnel  
-     #   image: cloudflare/cloudflared:latest
-     #   args: ["tunnel", "--url", "http://kafka.default.svc.cluster.local:9092"] # K8s Service Name:Port
-      - name: serving-tunnel
-        image: cloudflare/cloudflared:latest
-        args: ["tunnel", "--url", "http://taxi-serving-service.default.svc.cluster.local:80"]
+        
       - name: prometheus-tunnel
         image: cloudflare/cloudflared:latest
         args: ["tunnel", "--url", "http://prometheus.default.svc.cluster.local:9090"]
