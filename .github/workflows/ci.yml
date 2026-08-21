@@ -3,7 +3,7 @@ name: CI
 on:
   push:
     branches:
-      - feature/monitoring
+      - integration/newfb #feature/monitoring
 
   pull_request:
     branches:
