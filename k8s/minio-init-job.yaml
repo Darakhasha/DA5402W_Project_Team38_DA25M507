@@ -3,15 +3,22 @@ kind: Job
 metadata:
   name: minio-init-job
 spec:
-  ttlSecondsAfterFinished: 60
   template:
     spec:
-      restartPolicy: OnFailure
       containers:
-        - name: minio-mc
-          image: minio/mc
-          command: ["/bin/sh", "-c"]
-          args:
-            - |
-              mc alias set myminio http://minio.default.svc.cluster.local:9000 minioadmin minioadmin
-              mc mb --ignore-existing myminio/data-files
+      - name: minio-mc
+        image: minio/mc
+        command:
+        - /bin/sh
+        - -c
+        - |
+          # Connect to MinIO
+          mc alias set myminio http://minio:9000 minioadmin minioadmin
+          # Create both buckets (ignores if they already exist)
+          mc mb myminio/data-files --ignore-existing
+          mc mb myminio/models --ignore-existing
+          # Make them accessible
+          mc anonymous set download myminio/data-files
+          mc anonymous set download myminio/models
+          echo "MinIO buckets created successfully!"
+      restartPolicy: OnFailure

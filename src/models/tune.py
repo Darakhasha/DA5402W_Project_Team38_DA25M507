@@ -9,7 +9,8 @@ from sklearn.metrics import mean_squared_error
 
 # Add current directory to path for clean imports
 sys.path.append(os.path.dirname(__file__))
-from train import load_data
+# CHANGED: Added setup_mlflow to the import list
+from train import load_data, setup_mlflow
 
 def objective(trial):
     X_train, X_test, y_train, y_test = load_data()
@@ -35,6 +36,9 @@ def objective(trial):
     return rmse
 
 def run_tuning(n_trials: int = 10):
+    # CHANGED: Initialize MLflow with MinIO and SQLite settings before running
+    setup_mlflow()
+    
     mlflow.set_experiment("Taxi_Demand_Hyperparameter_Tuning")
     with mlflow.start_run(run_name="Optuna_XGBoost_Study"):
         study = optuna.create_study(direction="minimize")

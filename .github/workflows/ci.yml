@@ -152,8 +152,13 @@ jobs:
       - name: Verify MinIO rollout
         run: kubectl rollout status deployment/minio --timeout=120s
 
-      - name: Port-Forward MinIO to Localhost
-        run: python -c "import subprocess, time; subprocess.Popen(['kubectl', 'port-forward', 'deployment/minio', '9000:9000','9001:9001']); time.sleep(5)"
+      - name: Initialize MinIO Bucket
+        run: |
+          kubectl apply -f k8s/minio-init-job.yaml
+          kubectl wait --for=condition=complete job/minio-init-job --timeout=60s  
+
+      #- name: Port-Forward MinIO to Localhost
+      #  run: python -c "import subprocess, time; subprocess.Popen(['kubectl', 'port-forward', 'deployment/minio', '9000:9000','9001:9001']); time.sleep(5)"
       
       # - name: Upload Artifacts to MinIO
       #   env:
@@ -167,6 +172,11 @@ jobs:
           kubectl apply -f k8s/pipeline-1-ingestion.yaml
           kubectl set image cronjob/pipeline-1-ingestion ingestion-container=${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
+      - name: Trigger Model Training Job
+        run: |
+          kubectl apply -f k8s/pipeline-2-training.yaml
+          kubectl wait --for=condition=complete job/pipeline-2-training --timeout=300s
+      
       - name: Deploy Taxi Serving API
         run: |
           kubectl apply -f k8s/pipeline-3-serving.yaml
@@ -174,6 +184,7 @@ jobs:
 
       - name: Verify Taxi Serving rollout
         run: kubectl rollout status deployment/pipeline-3-serving --timeout=120s  
+        
 
       - name: Deploy Postgres Metastore
         run: |

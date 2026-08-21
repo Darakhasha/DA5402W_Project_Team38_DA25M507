@@ -1,7 +1,16 @@
 import mlflow
+import os
+import sys
 from mlflow.tracking import MlflowClient
 
+# Add current directory to path for clean imports
+sys.path.append(os.path.dirname(__file__))
+from train import setup_mlflow
+
 def register_best_model(experiment_name="Taxi_Demand_Forecasting_Comparison", model_name="TaxiDemandModel"):
+    # CHANGED: Initialize MLflow settings so it knows where to look for the runs
+    setup_mlflow()
+    
     client = MlflowClient()
     experiment = client.get_experiment_by_name(experiment_name)
     
