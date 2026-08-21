@@ -22,7 +22,7 @@ def mock_mlflow_model():
         model_uri="models:/mock"
     )
     
-    with patch("app.main.get_model", return_value=dummy_loaded_model):
+    with patch("app.model_loader.get_model", return_value=dummy_loaded_model):
         yield
 
 
