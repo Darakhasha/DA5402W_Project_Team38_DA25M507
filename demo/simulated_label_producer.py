@@ -22,13 +22,12 @@ producer = KafkaProducer(
     value_serializer=lambda value: json.dumps(value).encode("utf-8"),
 )
 
-print("Simulated label producer started.")
-print("Waiting for inference events...\n")
+print("Simulated label producer started.", flush=True)
+print("Waiting for inference events...\n", flush=True)
 
 for message in consumer:
     event = message.value
 
-    # Ignore feedback events
     if event.get("event_type") != "inference":
         continue
 
@@ -39,20 +38,15 @@ for message in consumer:
     if request_id is None or prediction is None:
         continue
 
-    # Extract drift_mode signal passed from inference client
     drift_mode = event.get("drift_mode") or features.get("drift_mode", "normal")
 
-    print(f"Received prediction: {prediction} | Mode: {drift_mode}")
+    print(f"Received prediction: {prediction} | Mode: {drift_mode}", flush=True)
 
-    # Simulate delay before label arrives
     time.sleep(LABEL_DELAY_SECONDS)
 
-    # Calculate actual ground-truth label
     if drift_mode in ["performance_drift", "all_drift"]:
-        # Introduce a large error offset (+80 to +120) to trigger Performance Drift (MAE > 50)
         actual = prediction + random.randint(80, 120)
     else:
-        # Minimal noise (+/- 5) keeping MAE < 50 (Performance OK)
         actual = prediction + random.randint(-5, 5)
 
     feedback_event = {
@@ -63,4 +57,4 @@ for message in consumer:
 
     producer.send(KAFKA_TOPIC, value=feedback_event).get(timeout=10)
 
-    print(f"Sent simulated actual: {actual} for request_id={request_id}\n")
+    print(f"Sent simulated actual: {actual} for request_id={request_id}\n", flush=True)

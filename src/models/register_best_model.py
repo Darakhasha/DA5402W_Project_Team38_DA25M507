@@ -3,19 +3,16 @@ import os
 import sys
 from mlflow.tracking import MlflowClient
 
-# Add current directory to path for clean imports
 sys.path.append(os.path.dirname(__file__))
 from train import setup_mlflow
 
 def register_best_model(experiment_name="Taxi_Demand_Forecasting_Comparison", model_name="TaxiDemandModel"):
-    # CHANGED: Initialize MLflow settings so it knows where to look for the runs
     setup_mlflow()
-    
     client = MlflowClient()
     experiment = client.get_experiment_by_name(experiment_name)
     
     if not experiment:
-        raise ValueError(f"Experiment '{experiment_name}' not found. Run train.py first.")
+        raise ValueError(f"Experiment '{experiment_name}' not found.")
         
     runs = client.search_runs(
         experiment_ids=[experiment.experiment_id],
@@ -34,13 +31,19 @@ def register_best_model(experiment_name="Taxi_Demand_Forecasting_Comparison", mo
     model_uri = f"runs:/{best_run_id}/model"
     model_version = mlflow.register_model(model_uri=model_uri, name=model_name)
     
-    # Transition to Production stage
     client.transition_model_version_stage(
         name=model_name,
         version=model_version.version,
         stage="Production"
     )
-    print(f"Registered '{model_name}' Version {model_version.version} into 'Production'")
+    
+    # Assign champion alias for Pipeline 3 serving API compatibility
+    client.set_registered_model_alias(
+        name=model_name,
+        alias="champion",
+        version=model_version.version
+    )
+    print(f"Successfully registered '{model_name}' Version {model_version.version} as '@champion'")
 
 if __name__ == "__main__":
     register_best_model()

@@ -1,28 +1,40 @@
 apiVersion: apps/v1
 kind: Deployment
-
 metadata:
   name: taxi-api
-
 spec:
   replicas: 1
-
   selector:
     matchLabels:
       app: taxi-api
-
   template:
     metadata:
       labels:
         app: taxi-api
-
     spec:
       imagePullSecrets:
         - name: ghcr-secret
       containers:
         - name: taxi-api
           image: taxi-api
-          imagePullPolicy: Always #IfNotPresent
-
+          imagePullPolicy: Always
           ports:
             - containerPort: 8000
+          env:
+            - name: MLFLOW_TRACKING_URI
+              value: "http://mlflow:5000"
+            - name: MLFLOW_S3_ENDPOINT_URL
+              value: "http://minio:9000"
+            - name: AWS_ACCESS_KEY_ID
+              value: "minioadmin"
+            - name: AWS_SECRET_ACCESS_KEY
+              value: "minioadmin"
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: "kafka:9092"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"

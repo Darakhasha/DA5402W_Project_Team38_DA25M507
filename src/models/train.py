@@ -7,18 +7,11 @@ import mlflow.xgboost
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from xgboost import XGBRegressor
-import os
 
 def setup_mlflow():
-    # Fetch the Postgres connection string from the Kubernetes environment
-    # Fallback to local SQLite ONLY if running locally outside of Kubernetes
-    tracking_uri = os.environ.get(
-        "MLFLOW_TRACKING_URI", 
-        "sqlite:///mlflow.db"
-    )
+    tracking_uri = os.environ.get("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db")
     mlflow.set_tracking_uri(tracking_uri)
     
-    # Force MLflow to save models to the MinIO 'models' bucket
     experiment_name = "Taxi_Demand_Forecasting_Comparison"
     client = mlflow.tracking.MlflowClient()
     experiment = client.get_experiment_by_name(experiment_name)
@@ -31,28 +24,38 @@ def setup_mlflow():
     mlflow.set_experiment(experiment_name)
 
 def load_data():
-    # Dynamically read all parquet files from the MinIO data-files bucket
-    print("Loading parquet files dynamically from MinIO...")
-    df = pd.read_parquet(
-        "s3://data-files/",
-        storage_options={
-            "key": os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin"),
-            "secret": os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin"),
-            "client_kwargs": {"endpoint_url": os.environ.get("MLFLOW_S3_ENDPOINT_URL", "http://minio:9000")}
-        }
-    )
+    local_path = "data/processed/taxi_demand_features.parquet"
     
+    # Try MinIO/S3 first, fallback to local path
+    try:
+        print("Loading parquet files from MinIO...")
+        df = pd.read_parquet(
+            "s3://data-files/processed/",
+            storage_options={
+                "key": os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin"),
+                "secret": os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin"),
+                "client_kwargs": {"endpoint_url": os.environ.get("MLFLOW_S3_ENDPOINT_URL", "http://minio:9000")}
+            }
+        )
+    except Exception as exc:
+        print(f"MinIO read failed ({exc}). Loading local file {local_path}...")
+        df = pd.read_parquet(local_path)
+    
+    # Auto-repair missing feature columns if needed
+    if 'hour_of_day' in df.columns:
+        if 'sin_hour' not in df.columns:
+            df['sin_hour'] = np.sin(2 * np.pi * df['hour_of_day'] / 24.0)
+        if 'cos_hour' not in df.columns:
+            df['cos_hour'] = np.cos(2 * np.pi * df['hour_of_day'] / 24.0)
+
     feature_cols = [
-        "PULocationID", "avg_passenger_count", "avg_trip_distance",
-        "hour_of_day", "day_of_week", "is_weekend", "sin_hour", "cos_hour",
-        "lag_1h_demand", "lag_2h_demand", "lag_24h_demand", "rolling_mean_3h"
+        "PULocationID", "avg_trip_distance", "avg_fare_amount",
+        "hour_of_day", "day_of_week", "is_weekend", "sin_hour", "cos_hour"
     ]
     
-    # Check which features actually exist in the dynamic dataframe to prevent KeyErrors
     feature_cols = [col for col in feature_cols if col in df.columns]
     target_col = "demand"
     
-    # 80% train / 20% test temporal split
     split_idx = int(len(df) * 0.8)
     train_df = df.iloc[:split_idx]
     test_df = df.iloc[split_idx:]
@@ -80,7 +83,6 @@ def train_and_compare_models():
     }
     
     results = {}
-    
     for model_name, model in models.items():
         with mlflow.start_run(run_name=model_name):
             print(f"--- Training {model_name} ---")
@@ -101,9 +103,6 @@ def train_and_compare_models():
                 mlflow.sklearn.log_model(model, artifact_path="model")
                 
             print(f"{model_name} -> RMSE: {rmse:.4f}, MAE: {mae:.4f}, R2: {r2:.4f}")
-
-    print("\nModel Comparison Summary:")
-    print(pd.DataFrame(results).T)
 
 if __name__ == "__main__":
     train_and_compare_models()

@@ -16,14 +16,9 @@ KAFKA_TOPIC = os.getenv(
 
 _producer = None
 
-# producer = KafkaProducer(
-#     bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-#     value_serializer=lambda value: json.dumps(value).encode("utf-8"),
-# )
 
 def get_producer():
     global _producer
-    # Skip creating a real producer if running unit tests
     if os.getenv("TESTING") == "true":
         return None
         
@@ -34,6 +29,7 @@ def get_producer():
         )
     return _producer
 
+
 def publish_inference(
     request_id: str,
     timestamp: str,
@@ -43,7 +39,7 @@ def publish_inference(
 
     producer = get_producer()
     if producer is None:
-        return  # Bypasses execution during unit tests
+        return
     
     event = {
         "event_type": "inference",
@@ -66,7 +62,7 @@ def publish_feedback(
 
     producer = get_producer()
     if producer is None:
-        return  # Bypasses execution during unit tests
+        return
     
     event = {
         "event_type": "feedback",

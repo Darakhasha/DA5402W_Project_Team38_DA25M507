@@ -1,174 +1,120 @@
 import csv
 import json
 import math
-import os 
-import subprocess
+import os
 import sys
 from pathlib import Path
 
+import boto3
+import pandas as pd
 from kafka import KafkaConsumer
+
 sys.path.append(str(Path(__file__).resolve().parent.parent))
-from scripts.s3_utils import upload_file 
+try:
+    from scripts.s3_utils import upload_file
+except ImportError:
+    upload_file = None
 
-# ============================================================
-# CONFIGURATION
-# ============================================================
+KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
+KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "taxi-events")
+KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "taxi-monitoring")
 
-KAFKA_BOOTSTRAP_SERVERS = os.getenv(
-    "KAFKA_BOOTSTRAP_SERVERS",
-    "kafka:9092",
-)
-
-KAFKA_TOPIC = os.getenv(
-    "KAFKA_TOPIC",
-    "taxi-events",
-)
-
-KAFKA_GROUP_ID = os.getenv(
-    "KAFKA_GROUP_ID",
-    "taxi-monitoring",
-)
-
-OUTPUT_FILE = os.getenv(
-    "INFERENCE_OUTPUT_FILE",
-    "monitoring/data/inference_data.csv",
-)
-
+OUTPUT_FILE = os.getenv("INFERENCE_OUTPUT_FILE", "monitoring/data/inference_data.csv")
 REFERENCE_DATA = os.getenv(
-    "REFERENCE_DATA",
-    "dummy/training_data.csv",
+    "REFERENCE_DATA", "data/processed/taxi_demand_features.parquet"
 )
-
 REFERENCE_PREDICTIONS = os.getenv(
-    "REFERENCE_PREDICTIONS",
-    "dummy/reference_predictions.csv",
+    "REFERENCE_PREDICTIONS", "dummy/reference_predictions.csv"
 )
 
-LOCAL_PATH =  os.getenv(
-                "DATA_LOCAL_PATH",
-                "dummy/",
-            )	
+OBJECT_NAME = os.getenv("DATA_DEST_PATH", "data/")
+BUCKET = os.getenv("DATA_BUCKET", "data-files")
 
-OBJECT_NAME =  os.getenv(
-		"DATA_DEST_PATH",
-		"data/",
-	) 	
+DRIFT_WINDOW_SIZE = int(os.getenv("DRIFT_WINDOW_SIZE", "10"))
+PSI_THRESHOLD = float(os.getenv("PSI_THRESHOLD", "0.20"))
 
-BUCKET =  os.getenv(
-                        "DATA_BUCKET",
-                        "data-files",
-                    )
-
-DRIFT_WINDOW_SIZE = int(
-    os.getenv(
-        "DRIFT_WINDOW_SIZE",
-        "10",
-    )
-)
-
-PSI_THRESHOLD = float(
-    os.getenv(
-        "PSI_THRESHOLD",
-        "0.20",
-    )
-)
-
-PERFORMANCE_WINDOW_SIZE = int(
-    os.getenv(
-        "PERFORMANCE_WINDOW_SIZE",
-        "10",
-    )
-)
-
-MAE_THRESHOLD = float(
-    os.getenv(
-        "MAE_THRESHOLD",
-        "50",
-    )
-)
-
-RMSE_THRESHOLD = float(
-    os.getenv(
-        "RMSE_THRESHOLD",
-        "75",
-    )
-)
-# ============================================================
-# FEATURES
-# ============================================================
+PERFORMANCE_WINDOW_SIZE = int(os.getenv("PERFORMANCE_WINDOW_SIZE", "10"))
+MAE_THRESHOLD = float(os.getenv("MAE_THRESHOLD", "50"))
+RMSE_THRESHOLD = float(os.getenv("RMSE_THRESHOLD", "75"))
 
 FEATURE_COLUMNS = [
-    "hour",
+    "PULocationID",
+    "avg_trip_distance",
+    "avg_fare_amount",
+    "hour_of_day",
     "day_of_week",
-    "temperature",
-    "rain",
-    "traffic_index",
+    "is_weekend",
+    "sin_hour",
+    "cos_hour",
 ]
 
+CSV_COLUMNS = ["request_id", "timestamp", "features", "prediction", "actual"]
 
-# ============================================================
-# CSV STORAGE
-# ============================================================
 
-CSV_COLUMNS = [
-    "request_id",
-    "timestamp",
-    "features",
-    "prediction",
-    "actual",
-]
+def upload_to_minio(file_path):
+    path = Path(file_path)
+    if not path.exists():
+        return
 
+    dest_object = f"{OBJECT_NAME.rstrip('/')}/{path.name}"
+
+    if upload_file is not None:
+        try:
+            upload_file(str(path), BUCKET, dest_object)
+            print(f"[MINIO] Synced {file_path} -> s3://{BUCKET}/{dest_object}", flush=True)
+            return
+        except Exception as error:
+            print(f"[MINIO] Helper upload failed, using boto3 fallback: {error}", flush=True)
+
+    try:
+        s3 = boto3.client(
+            "s3",
+            endpoint_url=os.getenv("MINIO_ENDPOINT", "http://minio:9000"),
+            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID", "minioadmin"),
+            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", "minioadmin"),
+        )
+        s3.upload_file(str(path), BUCKET, dest_object)
+        print(f"[MINIO] Boto3 uploaded {file_path} -> s3://{BUCKET}/{dest_object}", flush=True)
+    except Exception as error:
+        print(f"[MINIO] ERROR uploading {file_path}: {error}", flush=True)
+
+
+def download_from_minio(minio_key, local_path):
+    dest = Path(local_path)
+    if dest.exists():
+        return True
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        s3 = boto3.client(
+            "s3",
+            endpoint_url=os.getenv("MINIO_ENDPOINT", "http://minio:9000"),
+            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID", "minioadmin"),
+            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", "minioadmin"),
+        )
+        s3.download_file(BUCKET, minio_key, str(dest))
+        print(f"[MINIO] Downloaded s3://{BUCKET}/{minio_key} -> {dest}", flush=True)
+        return True
+    except Exception as error:
+        print(f"[MINIO] Could not fetch s3://{BUCKET}/{minio_key}: {error}", flush=True)
+        return False
 
 
 def initialize_csv():
-
     output_path = Path(OUTPUT_FILE)
-
-    output_path.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     if not output_path.exists():
-
-        with output_path.open(
-            "w",
-            newline="",
-            encoding="utf-8",
-        ) as file:
-
-            writer = csv.DictWriter(
-                file,
-                fieldnames=CSV_COLUMNS,
-            )
-
+        with output_path.open("w", newline="", encoding="utf-8") as file:
+            writer = csv.DictWriter(file, fieldnames=CSV_COLUMNS)
             writer.writeheader()
-
-        print(
-            f"[CSV] Created: {OUTPUT_FILE}",
-            flush=True,
-        )
+        print(f"[CSV] Created: {OUTPUT_FILE}", flush=True)
+        upload_to_minio(OUTPUT_FILE)
 
 
-def append_inference(
-    request_id,
-    timestamp,
-    features,
-    prediction,
-):
-
-    with open(
-        OUTPUT_FILE,
-        "a",
-        newline="",
-        encoding="utf-8",
-    ) as file:
-
-        writer = csv.DictWriter(
-            file,
-            fieldnames=CSV_COLUMNS,
-        )
-
+def append_inference(request_id, timestamp, features, prediction):
+    with open(OUTPUT_FILE, "a", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=CSV_COLUMNS)
         writer.writerow(
             {
                 "request_id": request_id,
@@ -178,1042 +124,248 @@ def append_inference(
                 "actual": "",
             }
         )
-
-    print(
-        f"[CSV] Saved inference: {request_id}",
-        flush=True,
-    )
+    print(f"[CSV] Saved inference: {request_id}", flush=True)
+    upload_to_minio(OUTPUT_FILE)
 
 
-def update_actual(
-    request_id,
-    actual,
-):
-
+def update_actual(request_id, actual):
     if not Path(OUTPUT_FILE).exists():
         return
 
     rows = []
     found = False
 
-    with open(
-        OUTPUT_FILE,
-        "r",
-        newline="",
-        encoding="utf-8",
-    ) as file:
-
+    with open(OUTPUT_FILE, "r", newline="", encoding="utf-8") as file:
         reader = csv.DictReader(file)
-
         for row in reader:
-
             if row["request_id"] == request_id:
-
                 row["actual"] = actual
                 found = True
-
             rows.append(row)
 
     if not found:
-
-        print(
-            f"[CSV] WARNING: request_id not found: "
-            f"{request_id}",
-            flush=True,
-        )
-
+        print(f"[CSV] WARNING: request_id not found: {request_id}", flush=True)
         return
 
-    with open(
-        OUTPUT_FILE,
-        "w",
-        newline="",
-        encoding="utf-8",
-    ) as file:
-
-        writer = csv.DictWriter(
-            file,
-            fieldnames=CSV_COLUMNS,
-        )
-
+    with open(OUTPUT_FILE, "w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=CSV_COLUMNS)
         writer.writeheader()
         writer.writerows(rows)
 
     print(
-        f"[CSV] Updated actual={actual} "
-        f"for request_id={request_id}",
+        f"[CSV] Updated actual={actual} for request_id={request_id}",
         flush=True,
     )
+    upload_to_minio(OUTPUT_FILE)
 
-
-# ============================================================
-# REFERENCE DATA
-# ============================================================
 
 def load_reference_data():
+    download_from_minio("data/processed/taxi_demand_features.parquet", REFERENCE_DATA)
 
     path = Path(REFERENCE_DATA)
-
     if not path.exists():
-
-        print(
-            f"[DRIFT] ERROR: Reference data not found: "
-            f"{REFERENCE_DATA}",
-            flush=True,
-        )
-
+        print(f"[DRIFT] ERROR: Reference feature file unavailable at {path}", flush=True)
         return []
 
     try:
+        if str(path).endswith(".parquet"):
+            df = pd.read_parquet(path)
+        else:
+            df = pd.read_csv(path)
 
-        with open(
-            path,
-            "r",
-            newline="",
-            encoding="utf-8",
-        ) as file:
-
-            reader = csv.DictReader(file)
-
-            rows = list(reader)
-
-        print(
-            f"[DRIFT] Loaded {len(rows)} reference rows "
-            f"from {REFERENCE_DATA}",
-            flush=True,
-        )
-
+        rows = df.to_dict(orient="records")
+        print(f"[DRIFT] Loaded {len(rows)} reference records from {path}", flush=True)
         return rows
-
     except Exception as error:
-
-        print(
-            f"[DRIFT] ERROR reading reference data: "
-            f"{error}",
-            flush=True,
-        )
-
+        print(f"[DRIFT] ERROR reading reference dataset {path}: {error}", flush=True)
         return []
 
 
 def load_reference_predictions():
+    download_from_minio("dummy/reference_predictions.csv", REFERENCE_PREDICTIONS)
 
     path = Path(REFERENCE_PREDICTIONS)
-
     if not path.exists():
-
-        print(
-            f"[DRIFT] WARNING: Reference predictions not found: "
-            f"{REFERENCE_PREDICTIONS}",
-            flush=True,
-        )
-
         return []
 
     predictions = []
-
     try:
-
-        with open(
-            path,
-            "r",
-            newline="",
-            encoding="utf-8",
-        ) as file:
-
+        with open(path, "r", newline="", encoding="utf-8") as file:
             reader = csv.DictReader(file)
-
             for row in reader:
-
-                value = row.get("prediction")
-
-                if value in (None, ""):
-                    continue
-
-                try:
-
-                    predictions.append(
-                        float(value)
-                    )
-
-                except (
-                    ValueError,
-                    TypeError,
-                ):
-
-                    continue
-
-        print(
-            f"[DRIFT] Loaded "
-            f"{len(predictions)} reference predictions",
-            flush=True,
-        )
-
+                val = row.get("prediction")
+                if val not in (None, ""):
+                    predictions.append(float(val))
+        print(f"[DRIFT] Loaded {len(predictions)} reference predictions from {path}", flush=True)
         return predictions
-
     except Exception as error:
-
-        print(
-            f"[DRIFT] ERROR reading reference predictions: "
-            f"{error}",
-            flush=True,
-        )
-
+        print(f"[DRIFT] ERROR reading reference predictions: {error}", flush=True)
         return []
 
 
-# ============================================================
-# PSI
-# ============================================================
-
-def calculate_psi(
-    reference_values,
-    current_values,
-    bins=2,
-):
-    print('Test')
+def calculate_psi(reference_values, current_values, bins=5):
     if not reference_values or not current_values:
-        return None
+        return 0.0
 
-    reference = [
-        float(value)
-        for value in reference_values
-    ]
+    ref = [float(v) for v in reference_values]
+    cur = [float(v) for v in current_values]
 
-    current = [
-        float(value)
-        for value in current_values
-    ]
-
-    minimum = min(reference)
-    maximum = max(reference)
-
+    minimum, maximum = min(ref), max(ref)
     if minimum == maximum:
         return 0.0
 
-    width = (
-        maximum - minimum
-    ) / bins
+    width = (maximum - minimum) / bins
+    ref_counts, cur_counts = [0] * bins, [0] * bins
 
-    reference_counts = [0] * bins
-    current_counts = [0] * bins
+    for v in ref:
+        idx = max(0, min(int((v - minimum) / width), bins - 1))
+        ref_counts[idx] += 1
 
-    for value in reference:
-
-        index = int(
-            (value - minimum) / width
-        )
-
-        index = max(
-            0,
-            min(index, bins - 1),
-        )
-
-        reference_counts[index] += 1
-
-    for value in current:
-
-        index = int(
-            (value - minimum) / width
-        )
-
-        index = max(
-            0,
-            min(index, bins - 1),
-        )
-
-        current_counts[index] += 1
-
-    reference_total = len(reference)
-    current_total = len(current)
+    for v in cur:
+        idx = max(0, min(int((v - minimum) / width), bins - 1))
+        cur_counts[idx] += 1
 
     psi = 0.0
-
     for i in range(bins):
-
-        reference_ratio = (
-            reference_counts[i]
-            / reference_total
-        )
-
-        current_ratio = (
-            current_counts[i]
-            / current_total
-        )
-
-        # Prevent log(0)
-        reference_ratio = max(
-            reference_ratio,
-            0.0001,
-        )
-
-        current_ratio = max(
-            current_ratio,
-            0.0001,
-        )
-
-        psi += (
-            current_ratio - reference_ratio
-        ) * math.log(
-            current_ratio / reference_ratio
-        )
+        ref_ratio = max(ref_counts[i] / len(ref), 0.0001)
+        cur_ratio = max(cur_counts[i] / len(cur), 0.0001)
+        psi += (cur_ratio - ref_ratio) * math.log(cur_ratio / ref_ratio)
 
     return psi
 
 
-# ============================================================
-# FEATURE DRIFT
-# ============================================================
-
-def detect_feature_drift(
-    reference_rows,
-    current_events,
-):
-
-    print(
-        "",
-        flush=True,
-    )
-
-    print(
-        "========== FEATURE DRIFT ==========",
-        flush=True,
-    )
-
+def detect_feature_drift(reference_rows, current_events):
     if not reference_rows:
-
-        print(
-            "[DRIFT] Cannot calculate feature drift: "
-            "reference data unavailable",
-            flush=True,
-        )
-
         return False
 
     drift_detected = False
-
     for feature in FEATURE_COLUMNS:
+        ref_vals = [
+            float(r[feature])
+            for r in reference_rows
+            if feature in r and r[feature] is not None
+        ]
 
-        reference_values = []
-        current_values = []
-
-        # -----------------------------
-        # Reference distribution
-        # -----------------------------
-
-        for row in reference_rows:
-
-            value = row.get(feature)
-
-            if value in (None, ""):
-                continue
-
-            try:
-
-                reference_values.append(
-                    float(value)
-                )
-
-            except (
-                ValueError,
-                TypeError,
-            ):
-
-                continue
-
-        # -----------------------------
-        # Current distribution
-        # -----------------------------
-
+        cur_vals = []
         for event in current_events:
+            feats = event.get("features", {})
+            if feature in feats and feats[feature] is not None:
+                cur_vals.append(float(feats[feature]))
 
-            features = event.get(
-                "features",
-                {},
-            )
-
-            value = features.get(feature)
-
-            if value in (None, ""):
-                continue
-
-            try:
-
-                current_values.append(
-                    float(value)
-                )
-
-            except (
-                ValueError,
-                TypeError,
-            ):
-
-                continue
-
-        if not reference_values:
-
-            print(
-                f"{feature}: no reference data",
-                flush=True,
-            )
-
+        if not ref_vals or not cur_vals:
             continue
 
-        if not current_values:
-
-            print(
-                f"{feature}: no current data",
-                flush=True,
-            )
-
-            continue
-
-        psi = calculate_psi(
-            reference_values,
-            current_values,
-        )
-
-        print(
-            f"{feature}: PSI={psi:.4f}",
-            flush=True,
-        )
-
+        psi = calculate_psi(ref_vals, cur_vals)
+        print(f"[DRIFT] Feature '{feature}': PSI={psi:.4f}", flush=True)
         if psi >= PSI_THRESHOLD:
-
-            print(
-                f"[ALERT] DRIFT detected in "
-                f"{feature}",
-                flush=True,
-            )
-
+            print(f"[ALERT] FEATURE DRIFT detected in column: {feature} (PSI={psi:.4f})", flush=True)
             drift_detected = True
-
-    if drift_detected:
-
-        print(
-            "!!! FEATURE DRIFT DETECTED !!!",
-            flush=True,
-        )
-
-    else:
-
-        print(
-            "NO FEATURE DRIFT",
-            flush=True,
-        )
 
     return drift_detected
 
 
-# ============================================================
-# PREDICTION DRIFT
-# ============================================================
-
-def detect_prediction_drift(
-    reference_predictions,
-    current_events,
-):
-
-    print(
-        "",
-        flush=True,
-    )
-
-    print(
-        "========== PREDICTION DRIFT ==========",
-        flush=True,
-    )
-
-    if not reference_predictions:
-
-        print(
-            "[DRIFT] Prediction drift cannot be "
-            "calculated because reference predictions "
-            "are unavailable.",
-            flush=True,
-        )
-
+def detect_prediction_drift(reference_predictions, current_events):
+    if not reference_predictions or not current_events:
         return False
 
-    current_predictions = []
+    cur_preds = [
+        float(event["prediction"])
+        for event in current_events
+        if event.get("prediction") is not None
+    ]
 
-    for event in current_events:
-
-        prediction = event.get(
-            "prediction"
-        )
-
-        if prediction in (None, ""):
-            continue
-
-        try:
-
-            current_predictions.append(
-                float(prediction)
-            )
-
-        except (
-            ValueError,
-            TypeError,
-        ):
-
-            continue
-
-    if not current_predictions:
-
-        print(
-            "[DRIFT] No current predictions.",
-            flush=True,
-        )
-
+    if not cur_preds:
         return False
 
-    psi = calculate_psi(
-        reference_predictions,
-        current_predictions,
-    )
-
-    print(
-        f"Prediction PSI={psi:.4f}",
-        flush=True,
-    )
+    psi = calculate_psi(reference_predictions, cur_preds)
+    print(f"[DRIFT] Output Prediction PSI: {psi:.4f}", flush=True)
 
     if psi >= PSI_THRESHOLD:
-
-        print(
-            "!!! PREDICTION DRIFT DETECTED !!!",
-            flush=True,
-        )
-
+        print(f"[ALERT] PREDICTION DRIFT detected! PSI ({psi:.4f}) >= Threshold ({PSI_THRESHOLD})", flush=True)
         return True
-
-    print(
-        "NO PREDICTION DRIFT",
-        flush=True,
-    )
 
     return False
 
 
-# ============================================================
-# DRIFT WINDOW
-# ============================================================
+def detect_performance_drift():
+    if not Path(OUTPUT_FILE).exists():
+        return
 
-def run_drift_detection(
-    reference_rows,
-    reference_predictions,
-    current_window,
-):
+    try:
+        df = pd.read_csv(OUTPUT_FILE)
+        labeled = df[df["actual"].notna() & (df["actual"] != "")].copy()
 
-    print(
-        "",
-        flush=True,
-    )
+        if len(labeled) < PERFORMANCE_WINDOW_SIZE:
+            return
 
-    print(
-        "########################################",
-        flush=True,
-    )
+        recent = labeled.tail(PERFORMANCE_WINDOW_SIZE)
+        y_true = recent["actual"].astype(float)
+        y_pred = recent["prediction"].astype(float)
 
-    print(
-        "       RUNNING DRIFT DETECTION",
-        flush=True,
-    )
+        mae = (y_true - y_pred).abs().mean()
+        rmse = math.sqrt(((y_true - y_pred) ** 2).mean())
 
-    print(
-        f"Window size: {len(current_window)}",
-        flush=True,
-    )
+        print(f"[PERFORMANCE] Window Evaluation ({len(recent)} samples): MAE={mae:.4f}, RMSE={rmse:.4f}", flush=True)
 
-    print(
-        "########################################",
-        flush=True,
-    )
+        if mae >= MAE_THRESHOLD:
+            print(f"[ALERT] PERFORMANCE DRIFT detected! MAE ({mae:.4f}) >= Threshold ({MAE_THRESHOLD})", flush=True)
 
-    feature_drift = detect_feature_drift(
-        reference_rows,
-        current_window,
-    )
+        if rmse >= RMSE_THRESHOLD:
+            print(f"[ALERT] PERFORMANCE DRIFT detected! RMSE ({rmse:.4f}) >= Threshold ({RMSE_THRESHOLD})", flush=True)
 
-    prediction_drift = detect_prediction_drift(
-        reference_predictions,
-        current_window,
-    )
+    except Exception as error:
+        print(f"[PERFORMANCE] Error calculating performance metrics: {error}", flush=True)
 
-    print(
-        "",
-        flush=True,
-    )
-
-    print(
-        "=============== RESULT ===============",
-        flush=True,
-    )
-
-    print(
-        f"Feature drift    : {feature_drift}",
-        flush=True,
-    )
-
-    print(
-        f"Prediction drift : {prediction_drift}",
-        flush=True,
-    )
-
-    if feature_drift or prediction_drift:
-
-        print(
-            "!!! DRIFT DETECTED !!!",
-            flush=True,
-        )
-
-    else:
-
-        print(
-            "NO DRIFT DETECTED",
-            flush=True,
-        )
-
-    print(
-        "======================================",
-        flush=True,
-    )
-
-
-# ============================================================
-# KAFKA
-# ============================================================
 
 def create_consumer():
-
     return KafkaConsumer(
-
         KAFKA_TOPIC,
-
-        bootstrap_servers=(
-            KAFKA_BOOTSTRAP_SERVERS
-        ),
-
-        value_deserializer=lambda value:
-            json.loads(
-                value.decode("utf-8")
-            ),
-
+        bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+        value_deserializer=lambda v: json.loads(v.decode("utf-8")),
         auto_offset_reset="earliest",
-
         enable_auto_commit=True,
-
         group_id=KAFKA_GROUP_ID,
     )
 
 
-# ============================================================
-# PREDICTION PERFORMANCE
-# ============================================================
-
-def calculate_prediction_performance():
-
-    if not Path(OUTPUT_FILE).exists():
-
-        print(
-            "[PERFORMANCE] Inference CSV not found",
-            flush=True,
-        )
-
-        return
-
-    predictions = []
-    actuals = []
-
-    with open(
-        OUTPUT_FILE,
-        "r",
-        newline="",
-        encoding="utf-8",
-    ) as file:
-
-        reader = csv.DictReader(file)
-
-        for row in reader:
-
-            prediction = row.get("prediction")
-            actual = row.get("actual")
-
-            # Only use records for which
-            # the real label has arrived.
-            if prediction in (None, ""):
-                continue
-
-            if actual in (None, ""):
-                continue
-
-            try:
-
-                predictions.append(
-                    float(prediction)
-                )
-
-                actuals.append(
-                    float(actual)
-                )
-
-            except (
-                ValueError,
-                TypeError,
-            ):
-
-                continue
-
-    if len(predictions) < PERFORMANCE_WINDOW_SIZE:
-
-        print(
-            f"[PERFORMANCE] Waiting for labels: "
-            f"{len(predictions)}/"
-            f"{PERFORMANCE_WINDOW_SIZE}",
-            flush=True,
-        )
-
-        return
-
-    # Use the most recent labeled observations
-    predictions = predictions[
-        -PERFORMANCE_WINDOW_SIZE:
-    ]
-
-    actuals = actuals[
-        -PERFORMANCE_WINDOW_SIZE:
-    ]
-
-    errors = []
-
-    squared_errors = []
-
-    for prediction, actual in zip(
-        predictions,
-        actuals,
-    ):
-
-        error = prediction - actual
-
-        errors.append(
-            abs(error)
-        )
-
-        squared_errors.append(
-            error ** 2
-        )
-
-    mae = (
-        sum(errors)
-        / len(errors)
-    )
-
-    rmse = math.sqrt(
-        sum(squared_errors)
-        / len(squared_errors)
-    )
-
-    print(
-        "",
-        flush=True,
-    )
-
-    print(
-        "========== PREDICTION PERFORMANCE ==========",
-        flush=True,
-    )
-
-    print(
-        f"Labeled samples: {len(predictions)}",
-        flush=True,
-    )
-
-    print(
-        f"MAE:  {mae:.4f}",
-        flush=True,
-    )
-
-    print(
-        f"RMSE: {rmse:.4f}",
-        flush=True,
-    )
-
-    print(
-        f"MAE threshold:  {MAE_THRESHOLD}",
-        flush=True,
-    )
-
-    print(
-        f"RMSE threshold: {RMSE_THRESHOLD}",
-        flush=True,
-    )
-
-    performance_degraded = (
-        mae > MAE_THRESHOLD
-        or rmse > RMSE_THRESHOLD
-    )
-
-    if performance_degraded:
-
-        print(
-            "!!! MODEL PERFORMANCE DEGRADED !!!",
-            flush=True,
-        )
-
-    else:
-
-        print(
-            "MODEL PERFORMANCE OK",
-            flush=True,
-        )
-
-    print(
-        "=============================================",
-        flush=True,
-    )
-
-    return {
-        "mae": mae,
-        "rmse": rmse,
-        "degraded": performance_degraded,
-    }
-# ============================================================
-# MAIN
-# ============================================================
-
-def upload_gen_file(local_file_path,OBJECT_NAME,BUCKET):
-    if not os.path.exists(local_file_path):
-                return
-
-    file_name = Path(local_file_path).name
-    dest_path = f"{OBJECT_NAME.strip('/')}/{file_name}"
-
-    print('DT:',dest_path,flush=True)
-    try:
-        upload_file(
-            local_path=local_file_path,
-            bucket=BUCKET,
-            object_name=dest_path
-        )
-        print(f"[MINIO] Uploaded {local_file_path} -> {BUCKET}/{dest_path}", flush=True)
-    except Exception as err:
-        print(f"[MINIO] Upload error for {local_file_path}: {err}", flush=True)    
-
 def main():
-
-    print(
-        "======================================",
-        flush=True,
-    )
-
-    print(
-        "     INFERENCE DATA MONITOR STARTED",
-        flush=True,
-    )
-
-    print(
-        "======================================",
-        flush=True,
-    )
-
-    print(
-        f"Kafka: {KAFKA_BOOTSTRAP_SERVERS}",
-        flush=True,
-    )
-
-    print(
-        f"Topic: {KAFKA_TOPIC}",
-        flush=True,
-    )
-
-    print(
-        f"Output: {OUTPUT_FILE}",
-        flush=True,
-    )
-
-    print(
-        f"Reference data: {REFERENCE_DATA}",
-        flush=True,
-    )
-
-    print(
-        f"Reference predictions: "
-        f"{REFERENCE_PREDICTIONS}",
-        flush=True,
-    )
-
-    print(
-        f"Window size: {DRIFT_WINDOW_SIZE}",
-        flush=True,
-    )
-
-    print(
-        f"PSI threshold: {PSI_THRESHOLD}",
-        flush=True,
-    )
-
-    print(
-        "======================================",
-        flush=True,
-    )
-
     initialize_csv()
-
     reference_rows = load_reference_data()
-
-    reference_predictions = (
-        load_reference_predictions()
-    )
-
+    reference_predictions = load_reference_predictions()
     consumer = create_consumer()
 
-    print(
-        "Waiting for Kafka events...",
-        flush=True,
-    )
-
+    print("[MONITOR] Kafka listener active...", flush=True)
     current_window = []
 
     for message in consumer:
-
         try:
-
             event = message.value
-
-            event_type = event.get(
-                "event_type"
-            )
-
-            # ================================================
-            # INFERENCE
-            # ================================================
+            event_type = event.get("event_type")
 
             if event_type == "inference":
-
-                request_id = event.get(
-                    "request_id"
-                )
-
-                timestamp = event.get(
-                    "timestamp"
-                )
-
-                features = event.get(
-                    "features",
-                    {},
-                )
-
-                prediction = event.get(
-                    "prediction"
-                )
-
+                request_id = event.get("request_id")
                 if not request_id:
-
-                    print(
-                        "[ERROR] Inference event "
-                        "has no request_id",
-                        flush=True,
-                    )
-
                     continue
 
                 append_inference(
-                    request_id=request_id,
-                    timestamp=timestamp,
-                    features=features,
-                    prediction=prediction,
+                    request_id,
+                    event.get("timestamp"),
+                    event.get("features", {}),
+                    event.get("prediction"),
                 )
-
-                current_window.append(
-                    event
-                )
-
-                print(
-                    f"[KAFKA] Received inference "
-                    f"{len(current_window)}/"
-                    f"{DRIFT_WINDOW_SIZE}",
-                    flush=True,
-                )
-
-                # ============================================
-                # RUN AFTER 10 EVENTS
-                # ============================================
+                current_window.append(event)
 
                 if len(current_window) >= DRIFT_WINDOW_SIZE:
-
-                    run_drift_detection(
-                        reference_rows,
-                        reference_predictions,
-                        current_window,
-                    )
-
-                    # Start next window
+                    detect_feature_drift(reference_rows, current_window)
+                    detect_prediction_drift(reference_predictions, current_window)
                     current_window = []
 
-            # ================================================
-            # FEEDBACK
-            # ================================================
-
             elif event_type == "feedback":
+                update_actual(event.get("request_id"), event.get("actual"))
+                detect_performance_drift()
 
-                request_id = event.get(
-                    "request_id"
-                )
-
-                actual = event.get(
-                    "actual"
-                )
-
-                if not request_id:
-
-                    print(
-                        "[ERROR] Feedback event "
-                        "has no request_id",
-                        flush=True,
-                    )
-
-                    continue
-
-                if actual is None:
-
-                    print(
-                        "[ERROR] Feedback event "
-                        "has no actual value",
-                        flush=True,
-                    )
-
-                    continue
-
-                update_actual(
-                    request_id=request_id,
-                    actual=actual,
-                )
-
-                calculate_prediction_performance()
-
-            # ================================================
-            # UNKNOWN EVENT
-            # ================================================
-
-            else:
-
-                print(
-                    f"[WARNING] Unknown event_type="
-                    f"{event_type}",
-                    flush=True,
-                )
-
-        
-            upload_gen_file(OUTPUT_FILE,OBJECT_NAME,BUCKET)
-            upload_gen_file(REFERENCE_PREDICTIONS,OBJECT_NAME,BUCKET)
-            
         except Exception as error:
-
-            print(
-                "[ERROR] Failed to process "
-                f"Kafka event: {error}",
-                flush=True,
-            )
+            print(f"[ERROR] Processing Kafka event failed: {error}", flush=True)
 
 
 if __name__ == "__main__":

@@ -44,16 +44,22 @@ spec:
               value: "taxi-monitoring"
 
             - name: REFERENCE_DATA
-              value: "dummy/training_data.csv"
+              value: "/data/processed/taxi_demand_features.parquet"
 
             - name: TARGET_COLUMN
               value: "taxi_demand"
 
             - name: INFERENCE_OUTPUT_FILE
-              value: "/data/inference_data.csv"
+              value: "/data/monitoring/inference_data.csv"
 
             - name: REFERENCE_PREDICTIONS
               value: "/data/reference_predictions.csv"  
+
+            - name: DATA_BUCKET
+              value: "data-files"
+              
+            - name: DATA_DEST_PATH
+              value: "data/"  
 
             - name: DRIFT_WINDOW_SIZE
               value: "10"

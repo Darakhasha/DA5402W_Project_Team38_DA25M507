@@ -2,20 +2,14 @@ from __future__ import annotations
 
 import datetime as dt
 from typing import Optional
-
 from pydantic import BaseModel, Field
 
 
-# ---------------------------------------------------------------------
-# Prediction Request Schema
-# Receives engineered features from Pipeline 2
-# ---------------------------------------------------------------------
 class PredictRequest(BaseModel):
-    # Metadata
     location_id: int = Field(
         ...,
-        ge=0,
-        description="Taxi pickup zone / location ID",
+        ge=1,
+        description="Taxi pickup zone ID (PULocationID)",
         examples=[42],
     )
 
@@ -25,41 +19,18 @@ class PredictRequest(BaseModel):
         examples=["2026-08-20T18:30:00"],
     )
 
-    # Engineered features from Spark Pipeline
-    hour: int = Field(
-        ...,
-        ge=0,
-        le=23,
-        description="Hour of day",
-        examples=[18],
+    avg_trip_distance: Optional[float] = Field(
+        2.5,
+        ge=0.0,
+        description="Historical or estimated average trip distance in miles",
+        examples=[3.2],
     )
 
-    day_of_week: int = Field(
-        ...,
-        ge=0,
-        le=6,
-        description="Day of week (Monday=0, Sunday=6)",
-        examples=[3],
-    )
-
-    temperature: Optional[float] = Field(
-        None,
-        description="Temperature in Celsius",
-        examples=[28.5],
-    )
-
-    rain: Optional[float] = Field(
-        None,
-        ge=0,
-        description="Rainfall / precipitation value",
-        examples=[2.4],
-    )
-
-    traffic_index: Optional[float] = Field(
-        None,
-        ge=0,
-        description="Traffic congestion index",
-        examples=[65.0],
+    avg_fare_amount: Optional[float] = Field(
+        15.0,
+        ge=0.0,
+        description="Historical or estimated average fare amount in USD",
+        examples=[18.5],
     )
 
     model_config = {
@@ -68,48 +39,30 @@ class PredictRequest(BaseModel):
                 {
                     "location_id": 42,
                     "timestamp": "2026-08-20T18:30:00",
-                    "hour": 18,
-                    "day_of_week": 3,
-                    "temperature": 28.5,
-                    "rain": 2.4,
-                    "traffic_index": 65.0,
+                    "avg_trip_distance": 3.2,
+                    "avg_fare_amount": 18.5,
                 }
             ]
         }
     }
 
 
-# ---------------------------------------------------------------------
-# Prediction Response Schema
-# Returned by FastAPI after model inference
-# ---------------------------------------------------------------------
 class PredictResponse(BaseModel):
     location_id: int
     timestamp: dt.datetime
-
     predicted_demand: float
-
     model_name: str
     model_version: str
     horizon_minutes: int
-
     request_id: str
-
-    # Features used for prediction (useful for monitoring & debugging)
     features: dict[str, float | int | None]
 
 
-# ---------------------------------------------------------------------
-# Health Check
-# ---------------------------------------------------------------------
 class HealthResponse(BaseModel):
     status: str
     model_loaded: bool
 
 
-# ---------------------------------------------------------------------
-# Model Information
-# ---------------------------------------------------------------------
 class ModelInfoResponse(BaseModel):
     model_name: str
     model_version: str
@@ -118,15 +71,13 @@ class ModelInfoResponse(BaseModel):
     champion_metrics: dict
 
 
-# ---------------------------------------------------------------------
-# Optional Schema for Spark Pipeline Output
-# Can be used internally between Pipeline 2 and Pipeline 3
-# ---------------------------------------------------------------------
 class EngineeredFeatureRecord(BaseModel):
     location_id: int
     timestamp: dt.datetime
-    hour: int
+    avg_trip_distance: float
+    avg_fare_amount: float
+    hour_of_day: int
     day_of_week: int
-    temperature: Optional[float]
-    rain: Optional[float]
-    traffic_index: Optional[float]
+    is_weekend: int
+    sin_hour: float
+    cos_hour: float

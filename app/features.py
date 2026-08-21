@@ -1,90 +1,49 @@
-"""
-Feature engineering shared by training (train_model.py) and serving (app/main.py).
-
-In the real team pipeline this module would read the same feature schema that
-Zeba's Kafka/Spark ingestion + Airflow DAG produce and version with DVC. Here it
-is reimplemented locally so Darshita's deployment pipeline is fully self-contained
-and testable without the other three pipelines running.
-"""
 from __future__ import annotations
 
 import datetime as dt
 from typing import Optional
-
 import numpy as np
 import pandas as pd
 
-try:
-    import holidays as holidays_lib
-
-    _INDIA_HOLIDAYS = holidays_lib.India()
-except Exception:  # pragma: no cover - holidays lib is optional at runtime
-    _INDIA_HOLIDAYS = {}
-
 FEATURE_COLUMNS = [
-    "location_id",
-    "hour",
+    "PULocationID",
+    "avg_trip_distance",
+    "avg_fare_amount",
+    "hour_of_day",
     "day_of_week",
-    "month",
     "is_weekend",
-    "is_holiday",
-    "is_rush_hour",
-    "temperature_c",
-    "precipitation_mm",
-    "rolling_avg_1h",
-    "rolling_avg_24h",
+    "sin_hour",
+    "cos_hour",
 ]
-
-
-def _is_rush_hour(hour: int) -> int:
-    return int((7 <= hour <= 10) or (17 <= hour <= 20))
 
 
 def build_feature_row(
     location_id: int,
     timestamp: dt.datetime,
-    is_holiday: Optional[bool] = None,
-    temperature_c: Optional[float] = None,
-    precipitation_mm: Optional[float] = None,
-    rolling_avg_1h: Optional[float] = None,
-    rolling_avg_24h: Optional[float] = None,
+    avg_trip_distance: Optional[float] = None,
+    avg_fare_amount: Optional[float] = None,
 ) -> pd.DataFrame:
-    """Build a single-row feature DataFrame for the given (location, timestamp).
+    """Build a single-row feature DataFrame synchronized with training features."""
+    hour_of_day = timestamp.hour
+    day_of_week = timestamp.weekday()  # Monday=0, Sunday=6
+    is_weekend = int(day_of_week >= 5)
 
-    Mirrors the "Time Features" + weather join described in the project brief:
-    hour of day, day of week, month, weekend flag, holiday flag, rush-hour flag,
-    plus rolling demand windows and a weather join.
-    """
-    if is_holiday is None:
-        is_holiday = timestamp.date() in _INDIA_HOLIDAYS
-
-    if temperature_c is None:
-        # Simple seasonal default so the endpoint works with no weather feed attached.
-        temperature_c = 25 + 8 * np.sin(2 * np.pi * (timestamp.timetuple().tm_yday / 365))
-
-    if precipitation_mm is None:
-        precipitation_mm = 0.0
-
-    # In production these two rolling features come from Zeba's Spark Streaming
-    # aggregation window (avg rides in this zone over last 1h / 24h). Here we fall
-    # back to a location-conditioned heuristic seed so the model has something
-    # sensible to consume when called standalone.
-    if rolling_avg_1h is None:
-        rolling_avg_1h = 20 + (location_id % 50)
-    if rolling_avg_24h is None:
-        rolling_avg_24h = 20 + (location_id % 50)
+    sin_hour = np.sin(2 * np.pi * hour_of_day / 24.0)
+    cos_hour = np.cos(2 * np.pi * hour_of_day / 24.0)
 
     row = {
-        "location_id": location_id,
-        "hour": timestamp.hour,
-        "day_of_week": timestamp.weekday(),
-        "month": timestamp.month,
-        "is_weekend": int(timestamp.weekday() >= 5),
-        "is_holiday": int(bool(is_holiday)),
-        "is_rush_hour": _is_rush_hour(timestamp.hour),
-        "temperature_c": float(temperature_c),
-        "precipitation_mm": float(precipitation_mm),
-        "rolling_avg_1h": float(rolling_avg_1h),
-        "rolling_avg_24h": float(rolling_avg_24h),
+        "PULocationID": int(location_id),
+        "avg_trip_distance": float(
+            avg_trip_distance if avg_trip_distance is not None else 2.5
+        ),
+        "avg_fare_amount": float(
+            avg_fare_amount if avg_fare_amount is not None else 15.0
+        ),
+        "hour_of_day": int(hour_of_day),
+        "day_of_week": int(day_of_week),
+        "is_weekend": int(is_weekend),
+        "sin_hour": float(sin_hour),
+        "cos_hour": float(cos_hour),
     }
+
     return pd.DataFrame([row], columns=FEATURE_COLUMNS)

@@ -1,144 +1,70 @@
+import os
 import numpy as np
 import pandas as pd
-
 
 np.random.seed(42)
 
 
-# ============================================================
-# 1. TRAINING / REFERENCE DATA
-# ============================================================
+def generate_datasets():
+    n_training = 1000
 
-n_training = 1000
+    timestamps = pd.date_range(start="2026-01-01", periods=n_training, freq="h")
 
-timestamps = pd.date_range(
-    start="2026-01-01",
-    periods=n_training,
-    freq="h"
-)
+    pu_locations = np.random.randint(1, 264, size=n_training)
+    avg_trip_distance = np.round(
+        np.random.exponential(scale=3.0, size=n_training) + 0.5, 2
+    )
+    avg_fare_amount = np.round(
+        avg_trip_distance * 3.5 + np.random.normal(2.5, 1.0, size=n_training), 2
+    )
 
-hour = timestamps.hour
-day_of_week = timestamps.dayofweek
+    hour = timestamps.hour
+    day_of_week = timestamps.dayofweek
+    is_weekend = (day_of_week >= 5).astype(int)
 
-temperature = np.random.normal(
-    loc=28,
-    scale=4,
-    size=n_training
-)
+    sin_hour = np.sin(2 * np.pi * hour / 24.0)
+    cos_hour = np.cos(2 * np.pi * hour / 24.0)
 
-rain = np.random.binomial(
-    n=1,
-    p=0.2,
-    size=n_training
-)
+    demand = np.maximum(
+        0,
+        (
+            20
+            + 15 * ((hour >= 7) & (hour <= 9))
+            + 25 * ((hour >= 17) & (hour <= 20))
+            + 0.5 * avg_fare_amount
+            + np.random.normal(0, 5, n_training)
+        ),
+    ).astype(int)
 
-traffic_index = np.random.uniform(
-    low=20,
-    high=80,
-    size=n_training
-)
+    training_data = pd.DataFrame(
+        {
+            "timestamp": timestamps,
+            "PULocationID": pu_locations,
+            "avg_trip_distance": avg_trip_distance,
+            "avg_fare_amount": avg_fare_amount,
+            "hour_of_day": hour,
+            "day_of_week": day_of_week,
+            "is_weekend": is_weekend,
+            "sin_hour": sin_hour,
+            "cos_hour": cos_hour,
+            "demand": demand,
+        }
+    )
 
-taxi_demand = (
-    50
-    + 20 * ((hour >= 7) & (hour <= 9))
-    + 25 * ((hour >= 17) & (hour <= 20))
-    + 0.4 * traffic_index
-    + 5 * rain
-    + np.random.normal(0, 5, n_training)
-)
+    # Save feature reference parquet for Pipelines 1, 2, 3, and 4
+    output_dir = "data/processed"
+    os.makedirs(output_dir, exist_ok=True)
+    target_parquet_path = os.path.join(output_dir, "taxi_demand_features.parquet")
+    training_data.to_parquet(target_parquet_path, index=False)
+    print(f"[DATA] Successfully created reference parquet at {target_parquet_path}")
 
-taxi_demand = np.maximum(
-    0,
-    taxi_demand
-).astype(int)
-
-
-training_data = pd.DataFrame({
-    "timestamp": timestamps,
-    "hour": hour,
-    "day_of_week": day_of_week,
-    "temperature": temperature,
-    "rain": rain,
-    "traffic_index": traffic_index,
-    "taxi_demand": taxi_demand
-})
-
-
-training_data.to_csv(
-    "dummy/training_data.csv",
-    index=False
-)
+    # Save baseline prediction reference CSV for prediction drift calculation
+    dummy_dir = "dummy"
+    os.makedirs(dummy_dir, exist_ok=True)
+    ref_preds_path = os.path.join(dummy_dir, "reference_predictions.csv")
+    pd.DataFrame({"prediction": demand}).to_csv(ref_preds_path, index=False)
+    print(f"[DATA] Successfully created prediction reference CSV at {ref_preds_path}")
 
 
-# ============================================================
-# 2. INCOMING / CURRENT DATA
-# ============================================================
-
-n_incoming = 300
-
-incoming_timestamps = pd.date_range(
-    start="2026-02-12",
-    periods=n_incoming,
-    freq="h"
-)
-
-incoming_hour = incoming_timestamps.hour
-incoming_day_of_week = incoming_timestamps.dayofweek
-
-incoming_temperature = np.random.normal(
-    loc=29,
-    scale=4,
-    size=n_incoming
-)
-
-incoming_rain = np.random.binomial(
-    n=1,
-    p=0.2,
-    size=n_incoming
-)
-
-incoming_traffic_index = np.random.uniform(
-    low=20,
-    high=80,
-    size=n_incoming
-)
-
-incoming_taxi_demand = (
-    50
-    + 20 * ((incoming_hour >= 7) & (incoming_hour <= 9))
-    + 25 * ((incoming_hour >= 17) & (incoming_hour <= 20))
-    + 0.4 * incoming_traffic_index
-    + 5 * incoming_rain
-    + np.random.normal(0, 5, n_incoming)
-)
-
-incoming_taxi_demand = np.maximum(
-    0,
-    incoming_taxi_demand
-).astype(int)
-
-
-incoming_data = pd.DataFrame({
-    "timestamp": incoming_timestamps,
-    "hour": incoming_hour,
-    "day_of_week": incoming_day_of_week,
-    "temperature": incoming_temperature,
-    "rain": incoming_rain,
-    "traffic_index": incoming_traffic_index,
-    "taxi_demand": incoming_taxi_demand
-})
-
-
-incoming_data.to_csv(
-    "dummy/incoming_data.csv",
-    index=False
-)
-
-
-print("Dummy data generation completed.")
-print()
-print("Training data:")
-print(training_data.head())
-print()
-print("Incoming data:")
-print(incoming_data.head())
+if __name__ == "__main__":
+    generate_datasets()
