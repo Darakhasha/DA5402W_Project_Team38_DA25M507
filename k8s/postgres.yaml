@@ -12,7 +12,7 @@ spec:
       labels:
         app: postgres
     spec:
-      containers:
+      containers:  
         - name: postgres
           image: postgres:13
           envFrom:

@@ -13,7 +13,7 @@ producer = KafkaProducer(
     value_serializer=lambda v: json.dumps(v).encode('utf-8')
 )
 
-topic_name = 'taxi-events'
+topic_name = 'taxi-events' 
 
 file_path = 'data/raw/yellow_tripdata_2024-01.parquet'
 
