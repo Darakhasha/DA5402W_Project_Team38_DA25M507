@@ -14,4 +14,4 @@ spec:
       targetPort: 8000
      # nodePort: 30800
 
-  type: NodePort #ClusterIP #
+  type: ClusterIP #
