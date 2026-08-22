@@ -28,11 +28,16 @@ from app.schemas import (
 async def lifespan(app: FastAPI):
     try:
         loaded = get_model()
-        app_logger.info(
-            "Champion model loaded successfully: %s version=%s",
-            loaded.model_name,
-            loaded.model_version,
-        )
+        if loaded is not None:
+            app_logger.info(
+                "Champion model loaded successfully: %s version=%s",
+                loaded.model_name,
+                loaded.model_version,
+            )
+        else:
+            app_logger.warning(
+                "Champion model could not be loaded at startup. API is running in degraded state."
+            )
     except ModelNotLoadedError as exc:
         app_logger.error(
             "Champion model could not be loaded at startup: %s",
