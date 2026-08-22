@@ -4,7 +4,7 @@ import time
 import urllib.request
 
 
-LOCAL_PORT = 18000
+LOCAL_PORT = 18080
 
 
 def get_pod():
