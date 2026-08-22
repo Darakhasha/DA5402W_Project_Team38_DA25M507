@@ -157,7 +157,7 @@ jobs:
         run: |
           kubectl apply -f k8s/airflow.yaml
           kubectl rollout status deployment/airflow --timeout=300s
-          kubectl set image job/taxi-api  taxi-api=${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}    
+        #kubectl set image job/taxi-api  taxi-api=${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}    
 
       - name: Deploy deployment.yml
         run: kubectl apply -f k8s/deployment.yaml
