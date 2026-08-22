@@ -40,7 +40,7 @@ def main():
         [
             "kubectl",
             "port-forward",
-            f"pod/{pod}",
+            "service/taxi-api-service",
             f"{LOCAL_PORT}:8000",
         ],
         stdout=subprocess.PIPE,
