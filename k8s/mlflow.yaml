@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: mlflow
-        image: taxi-api #ghcr.io/mlflow/mlflow:v2.10.2
+        image: ghcr.io/mlflow/mlflow:v2.10.2
         command:
           - mlflow
           - server
