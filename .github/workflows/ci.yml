@@ -250,7 +250,7 @@ jobs:
 
       - name: Configure and Push DVC - Windows
         if: runner.os == 'Windows'
-        shell: pwsh
+        shell: powershell
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }}
