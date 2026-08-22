@@ -2,10 +2,13 @@ import subprocess
 import sys
 import time
 import urllib.request
+import urllib.error
 
 
 LOCAL_PORT = 18000
 SERVICE_PORT = 8000
+MAX_ATTEMPTS = 60
+WAIT_SECONDS = 2
 
 
 def main():
@@ -56,110 +59,132 @@ def main():
     )
 
     # --------------------------------------------------
-    # 2. Start port-forward
+    # 2. Start kubectl port-forward
     # --------------------------------------------------
 
     print("\n=== STARTING PORT FORWARD ===")
 
-    process = subprocess.Popen(
+    port_forward = subprocess.Popen(
         [
             "kubectl",
             "port-forward",
             "service/taxi-api-service",
             f"{LOCAL_PORT}:{SERVICE_PORT}",
         ],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    print(
+        f"Port forwarding started: "
+        f"localhost:{LOCAL_PORT} -> service:{SERVICE_PORT}"
     )
 
     try:
 
         # --------------------------------------------------
-        # 3. Wait for port-forward to become available
+        # 3. Give kubectl a moment to establish forwarding
         # --------------------------------------------------
 
-        print(
-            f"Waiting for port-forward "
-            f"127.0.0.1:{LOCAL_PORT}..."
-        )
+        time.sleep(3)
 
-        port_forward_ready = False
+        # --------------------------------------------------
+        # 4. Wait for /health
+        # --------------------------------------------------
 
-        for _ in range(30):
+        url = f"http://127.0.0.1:{LOCAL_PORT}/health"
 
-            if process.poll() is not None:
+        print(f"\nWaiting for API: {url}")
 
-                output = process.stdout.read()
+        for attempt in range(1, MAX_ATTEMPTS + 1):
 
-                print("\n=== PORT FORWARD FAILED ===")
-                print(output)
+            # Check whether kubectl died
+            if port_forward.poll() is not None:
+
+                print(
+                    "\nERROR: kubectl port-forward "
+                    "process stopped unexpectedly."
+                )
 
                 raise RuntimeError(
-                    f"kubectl port-forward exited with "
-                    f"code {process.returncode}"
+                    "kubectl port-forward exited before API became ready."
                 )
 
             try:
 
-                # Try the API
-                response = urllib.request.urlopen(
-                    f"http://127.0.0.1:{LOCAL_PORT}/health",
-                    timeout=2,
-                )
+                with urllib.request.urlopen(
+                    url,
+                    timeout=5,
+                ) as response:
+
+                    status = response.status
+
+                    print(
+                        f"Attempt {attempt}/{MAX_ATTEMPTS}: "
+                        f"HTTP {status}"
+                    )
+
+                    if status == 200:
+
+                        print("\n================================")
+                        print("SMOKE TEST PASSED")
+                        print("================================")
+
+                        return
+
+            except urllib.error.HTTPError as exc:
 
                 print(
-                    f"Health endpoint returned "
-                    f"HTTP {response.status}"
+                    f"Attempt {attempt}/{MAX_ATTEMPTS}: "
+                    f"HTTP {exc.code}"
                 )
 
-                if response.status == 200:
+            except urllib.error.URLError as exc:
 
-                    port_forward_ready = True
-                    break
+                print(
+                    f"Attempt {attempt}/{MAX_ATTEMPTS}: "
+                    f"connection not ready ({exc.reason})"
+                )
 
             except Exception as exc:
 
                 print(
-                    f"API not ready yet: {exc}"
+                    f"Attempt {attempt}/{MAX_ATTEMPTS}: "
+                    f"{type(exc).__name__}: {exc}"
                 )
 
-            time.sleep(2)
+            time.sleep(WAIT_SECONDS)
 
         # --------------------------------------------------
-        # 4. Final result
+        # 5. Timeout
         # --------------------------------------------------
 
-        if not port_forward_ready:
-
-            print("\n=== PORT FORWARD OUTPUT ===")
-
-            try:
-                output = process.stdout.read()
-                print(output)
-            except Exception:
-                pass
-
-            raise RuntimeError(
-                "API did not respond within 60 seconds."
-            )
-
-        print("\n=== SMOKE TEST PASSED ===")
+        raise RuntimeError(
+            f"API did not become ready after "
+            f"{MAX_ATTEMPTS * WAIT_SECONDS} seconds."
+        )
 
     finally:
 
+        # --------------------------------------------------
+        # 6. Always stop port-forward
+        # --------------------------------------------------
+
         print("\nStopping port-forward...")
 
-        process.terminate()
+        if port_forward.poll() is None:
 
-        try:
+            port_forward.terminate()
 
-            process.wait(timeout=10)
+            try:
+                port_forward.wait(timeout=5)
 
-        except subprocess.TimeoutExpired:
+            except subprocess.TimeoutExpired:
 
-            process.kill()
+                print("Force stopping kubectl...")
+
+                port_forward.kill()
+                port_forward.wait()
 
 
 if __name__ == "__main__":
@@ -170,6 +195,9 @@ if __name__ == "__main__":
 
     except Exception as exc:
 
-        print(f"\nSmoke test failed: {exc}")
+        print(
+            f"\nSmoke test failed: "
+            f"{type(exc).__name__}: {exc}"
+        )
 
         sys.exit(1)
