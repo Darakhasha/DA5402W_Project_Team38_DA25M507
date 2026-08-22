@@ -4,7 +4,7 @@ import time
 import urllib.request
 
 
-LOCAL_PORT = 8000 
+LOCAL_PORT = 8000
 
 
 def get_pod():
@@ -49,30 +49,13 @@ def main():
     )
 
     try:
-        max_retries = 15
-        response = None
-        
-        # Give the server and port-forward a few seconds to initialize
-        print("Waiting for FastAPI server to start inside the pod...")
+        # Give kubectl time to establish the port forward
         time.sleep(5)
 
-        for attempt in range(max_retries):
-            if process.poll() is not None:
-                _, stderr = process.communicate()
-                raise RuntimeError(f"kubectl port-forward process died: {stderr}")
-
-            try:
-                response = urllib.request.urlopen(
-                    f"http://127.0.0.1:{LOCAL_PORT}/health",
-                    timeout=5,
-                )
-                break
-            except Exception:
-                if attempt == max_retries - 1:
-                    _, stderr = process.communicate()
-                    raise RuntimeError(f"Health check connection failed. Details: {stderr}")
-                time.sleep(2)
-                print(f"Waiting for API endpoint to respond (attempt {attempt + 1})...")
+        response = urllib.request.urlopen(
+            f"http://127.0.0.1:{LOCAL_PORT}/health",
+            timeout=10,
+        )
 
         if response.status != 200:
             raise RuntimeError(
