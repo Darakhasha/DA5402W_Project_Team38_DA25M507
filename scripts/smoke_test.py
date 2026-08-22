@@ -49,11 +49,14 @@ def main():
     )
 
     try:
-        # Retry loop to wait for port-forward and server to be ready
         max_retries = 10
         response = None
         
         for attempt in range(max_retries):
+            if process.poll() is not None:
+                _, stderr = process.communicate()
+                raise RuntimeError(f"kubectl port-forward process died: {stderr}")
+
             try:
                 time.sleep(2)
                 response = urllib.request.urlopen(
@@ -63,7 +66,8 @@ def main():
                 break
             except Exception:
                 if attempt == max_retries - 1:
-                    raise
+                    _, stderr = process.communicate()
+                    raise RuntimeError(f"Port-forward failed. Details: {stderr}")
                 print(f"Waiting for port-forward tunnel to open (attempt {attempt + 1})...")
 
         if response.status != 200:
@@ -77,7 +81,7 @@ def main():
         process.terminate()
 
         try:
-            process.wait(timeout=100)
+            process.wait(timeout=10)
         except subprocess.TimeoutExpired:
             process.kill()
 
