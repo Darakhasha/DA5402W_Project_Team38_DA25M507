@@ -6,11 +6,11 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      app: postgres
+      app: airflow-postgres
   template:
     metadata:
       labels:
-        app: postgres
+        app: airflow-postgres
     spec:
       containers:
         - name: postgres
@@ -28,6 +28,6 @@ metadata:
   name: airflow-postgres
 spec:
   selector:
-    app: postgres
+    app: airflow-postgres
   ports:
     - port: 5432
