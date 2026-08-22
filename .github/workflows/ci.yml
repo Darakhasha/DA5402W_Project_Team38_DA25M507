@@ -248,14 +248,37 @@ jobs:
       #     kubectl apply -f k8s/cloudflared.yaml
       #     kubectl rollout status deployment/cloudflare-tunnels --timeout=60s
 
-      - name: Configure and Push DVC
-        # Securely load passwords from GitHub Secrets into the runner's memory
+      - name: Configure and Push DVC - Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }}
         run: |
-          dvc remote add -d minio-store s3://data-files --force         
-          dvc remote modify minio-store endpointurl http://127.0.0.1:9000          
+          $MINIO_NODEPORT = kubectl get svc minio -o jsonpath="{.spec.ports[0].nodePort}"
+
+          Write-Host "MinIO NodePort: $MINIO_NODEPORT"
+
+          dvc remote add -d minio-store s3://data-files --force
+          dvc remote modify --local minio-store endpointurl "http://127.0.0.1:$MINIO_NODEPORT"
+
           dvc push
+
+
+      - name: Configure and Push DVC - Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+        run: |
+          MINIO_NODEPORT=$(kubectl get svc minio -o jsonpath='{.spec.ports[0].nodePort}')
+
+          echo "MinIO NodePort: $MINIO_NODEPORT"
+
+          dvc remote add -d minio-store s3://data-files --force
+          dvc remote modify --local minio-store endpointurl "http://127.0.0.1:${MINIO_NODEPORT}"
+
+          dvc push  
 
       
