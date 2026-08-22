@@ -138,6 +138,14 @@ jobs:
           kubectl apply -f k8s/pipeline-1-ingestion.yaml
           kubectl set image cronjob/pipeline-1-ingestion ingestion-container=${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
+      
+      - name: Clean Up Existing Postgres State
+        run: |
+          kubectl delete deployment airflow-postgres --ignore-not-found=true
+          kubectl delete svc airflow-postgres --ignore-not-found=true
+          kubectl delete deployment airflow --ignore-not-found=true
+          echo "Cleaned up old database and airflow resources."
+      
       - name: Deploy Postgres Metastore
         run: |
           kubectl apply -f k8s/postgres.yaml
