@@ -1,46 +1,6 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: airflow-postgres
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: airflow-postgres
-  template:
-    metadata:
-      labels:
-        app: airflow-postgres
-    spec:
-      containers:
-        - name: postgres
-          image: postgres:13
-          env:
-            - name: POSTGRES_USER
-              value: "airflow"
-            - name: POSTGRES_PASSWORD
-              value: "airflow"
-            - name: POSTGRES_DB
-              value: "airflow"
-          ports:
-            - containerPort: 5432
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: airflow-postgres
-spec:
-  selector:
-    app: airflow-postgres
-  ports:
-    - port: 5432
-      targetPort: 5432
-
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
   name: airflow
 spec:
   replicas: 1
@@ -55,11 +15,10 @@ spec:
       imagePullSecrets:
         - name: ghcr-secret
 
-      containers:
-        - name: airflow
+      # 1. Init container handles migration and user creation safely first
+      initContainers:
+        - name: airflow-init
           image: apache/airflow:2.10.4
-          imagePullPolicy: Always
-
           command:
             - "sh"
             - "-c"
@@ -71,40 +30,30 @@ spec:
                 --lastname User \
                 --role Admin \
                 --email admin@example.com \
-                --password admin || true &&
-              airflow scheduler & \
-              airflow webserver
+                --password admin || true
+          env:
+            - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+              value: "postgresql+psycopg2://airflow:airflow@airflow-postgres.default.svc.cluster.local:5432/airflow"
+
+      # 2. Main container only runs scheduler and webserver cleanly
+      containers:
+        - name: airflow
+          image: apache/airflow:2.10.4
+          imagePullPolicy: Always
+          command:
+            - "sh"
+            - "-c"
+            - |
+              airflow scheduler &
+              exec airflow webserver
 
           ports:
             - containerPort: 8080
 
-          envFrom:
-            - secretRef:
-                name: minio-credentials
-
           env:
             - name: AIRFLOW__CORE__DAGS_FOLDER
               value: "/app/dags"
-
             - name: AIRFLOW__CORE__LOAD_EXAMPLES
               value: "False"
-
-            - name: AIRFLOW_CONN_MINIO_DEFAULT
-              value: >-
-                {"conn_type":"aws","extra":{"endpoint_url":"http://minio.default.svc.cluster.local:9000"}}
-
             - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
               value: "postgresql+psycopg2://airflow:airflow@airflow-postgres.default.svc.cluster.local:5432/airflow"
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: airflow-service
-spec:
-  type: ClusterIP #NodePort
-  selector:
-    app: airflow
-  ports:
-    - port: 8080
-      targetPort: 8080
