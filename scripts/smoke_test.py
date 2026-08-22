@@ -49,16 +49,19 @@ def main():
     )
 
     try:
-        max_retries = 10
+        max_retries = 15
         response = None
         
+        # Give the server and port-forward a few seconds to initialize
+        print("Waiting for FastAPI server to start inside the pod...")
+        time.sleep(5)
+
         for attempt in range(max_retries):
             if process.poll() is not None:
                 _, stderr = process.communicate()
                 raise RuntimeError(f"kubectl port-forward process died: {stderr}")
 
             try:
-                time.sleep(2)
                 response = urllib.request.urlopen(
                     f"http://127.0.0.1:{LOCAL_PORT}/health",
                     timeout=5,
@@ -67,8 +70,9 @@ def main():
             except Exception:
                 if attempt == max_retries - 1:
                     _, stderr = process.communicate()
-                    raise RuntimeError(f"Port-forward failed. Details: {stderr}")
-                print(f"Waiting for port-forward tunnel to open (attempt {attempt + 1})...")
+                    raise RuntimeError(f"Health check connection failed. Details: {stderr}")
+                time.sleep(2)
+                print(f"Waiting for API endpoint to respond (attempt {attempt + 1})...")
 
         if response.status != 200:
             raise RuntimeError(
