@@ -254,6 +254,7 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }}
         run: |
+          kubectl port-forward service/minio 9001:9001
           dvc remote add -d minio-store s3://data-files --force         
           dvc remote modify minio-store endpointurl http://127.0.0.1:9000          
           dvc push
