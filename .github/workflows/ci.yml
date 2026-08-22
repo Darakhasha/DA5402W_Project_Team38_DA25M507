@@ -213,10 +213,10 @@ jobs:
           kubectl rollout status deployment/minio --timeout=120s
          # kubectl wait --for=condition=ready pod -l app=minio --timeout=120s  
 
-      - name: Deploy Permanent Cloudflare Tunnels
-        run: |
-          kubectl apply -f k8s/cloudflared.yaml
-          kubectl rollout status deployment/cloudflare-tunnels --timeout=60s
+      # - name: Deploy Permanent Cloudflare Tunnels
+      #   run: |
+      #     kubectl apply -f k8s/cloudflared.yaml
+      #     kubectl rollout status deployment/cloudflare-tunnels --timeout=60s
   
       
       - name: Deploy drift monitor
