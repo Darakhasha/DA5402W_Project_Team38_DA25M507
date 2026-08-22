@@ -68,9 +68,7 @@ jobs:
 
       - name: Build MLflow image
         run: |
-          docker build \
-            -f Dockerfile.mlflow \
-            -t ghcr.io/darakhasha/mlflow:2.10.2 .
+          docker build -f Dockerfile.mlflow -t ghcr.io/darakhasha/mlflow:2.10.2 .
 
       - name: Push MLflow image
         run: |
