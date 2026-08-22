@@ -248,16 +248,38 @@ jobs:
       #     kubectl apply -f k8s/cloudflared.yaml
       #     kubectl rollout status deployment/cloudflare-tunnels --timeout=60s
 
+      - name: Port forwarding -Minio
+        run: |
+          kubectl port-forward service/minio 9001:9001
+
       - name: Configure and Push DVC
         # Securely load passwords from GitHub Secrets into the runner's memory
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }}
         run: |
-          kubectl port-forward service/minio 9001:9001
-          dvc remote add -d minio-store s3://data-files --force         
-          dvc remote modify minio-store endpointurl http://127.0.0.1:9000          
-          dvc push
+            python -c "
+            import os
+            import subprocess
+            import time
+            import sys
+
+            print('Starting MinIO port-forwarding...')
+            pf_process = subprocess.Popen(['kubectl', 'port-forward', 'deployment/minio', '9000:9000'])
+            time.sleep(5) 
+
+            try:
+                access_key = os.environ.get('AWS_ACCESS_KEY_ID')
+                secret_key = os.environ.get('AWS_SECRET_ACCESS_KEY')
+        
+                subprocess.run(['dvc', 'remote', 'add', '-d','minio-store', 's3://data-files', '--force'], check=True)		
+                subprocess.run(['dvc', 'remote', 'modify', 'minio-store', 'endpointurl', 'http://127.0.0.1:9000'], check=True)
+                subprocess.run(['dvc', 'push'], check=True)
+                  
+            finally:
+                  pf_process.terminate()
+                  pf_process.wait()
+              "
 
       # - name: Configure and Push DVC - Windows
       #   if: runner.os == 'Windows'
