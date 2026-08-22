@@ -49,13 +49,22 @@ def main():
     )
 
     try:
-        # Give kubectl time to establish the port forward
-        time.sleep(5)
-
-        response = urllib.request.urlopen(
-            f"http://127.0.0.1:{LOCAL_PORT}/health",
-            timeout=10,
-        )
+        # Retry loop to wait for port-forward and server to be ready
+        max_retries = 10
+        response = None
+        
+        for attempt in range(max_retries):
+            try:
+                time.sleep(2)
+                response = urllib.request.urlopen(
+                    f"http://127.0.0.1:{LOCAL_PORT}/health",
+                    timeout=5,
+                )
+                break
+            except Exception:
+                if attempt == max_retries - 1:
+                    raise
+                print(f"Waiting for port-forward tunnel to open (attempt {attempt + 1})...")
 
         if response.status != 200:
             raise RuntimeError(
