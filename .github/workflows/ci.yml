@@ -248,10 +248,6 @@ jobs:
       #     kubectl apply -f k8s/cloudflared.yaml
       #     kubectl rollout status deployment/cloudflare-tunnels --timeout=60s
 
-      - name: Port forwarding -Minio
-        run: |
-          kubectl port-forward service/minio 9001:9001
-
       - name: Configure and Push DVC
         # Securely load passwords from GitHub Secrets into the runner's memory
         env:
