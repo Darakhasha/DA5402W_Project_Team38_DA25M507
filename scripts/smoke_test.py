@@ -68,7 +68,7 @@ def main():
         process.terminate()
 
         try:
-            process.wait(timeout=10)
+            process.wait(timeout=100)
         except subprocess.TimeoutExpired:
             process.kill()
 
