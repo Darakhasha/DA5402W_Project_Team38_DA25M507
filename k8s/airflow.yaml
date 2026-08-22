@@ -102,7 +102,7 @@ kind: Service
 metadata:
   name: airflow-service
 spec:
-  type: NodePort
+  type: ClusterIP #NodePort
   selector:
     app: airflow
   ports:
