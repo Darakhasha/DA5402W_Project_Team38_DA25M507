@@ -23,8 +23,13 @@ spec:
             - "sh"
             - "-c"
             - |
-              echo "Running database migration..."
-              airflow db upgrade
+              echo "Waiting for PostgreSQL..."
+              while ! nc -z airflow-postgres 5432; do
+                sleep 2
+              done
+              
+              echo "Checking/Initializing database schema..."
+              airflow db migrate
               
               echo "Creating default admin user..."
               airflow users create \
