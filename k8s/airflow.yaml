@@ -23,7 +23,10 @@ spec:
             - "sh"
             - "-c"
             - |
-              airflow db migrate &&
+              echo "Running database migration..."
+              airflow db upgrade
+              
+              echo "Creating default admin user..."
               airflow users create \
                 --username admin \
                 --firstname Admin \
@@ -57,3 +60,16 @@ spec:
               value: "False"
             - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
               value: "postgresql+psycopg2://airflow:airflow@airflow-postgres.default.svc.cluster.local:5432/airflow"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: airflow-service
+spec:
+  type: ClusterIP
+  selector:
+    app: airflow
+  ports:
+    - port: 8080
+      targetPort: 8080              
