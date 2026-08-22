@@ -14,7 +14,8 @@ spec:
     spec:
       containers:
       - name: mlflow
-        image: ghcr.io/mlflow/mlflow:v2.10.2
+        image: ghcr.io/darakhasha/mlflow:latest  #ghcr.io/mlflow/mlflow:v2.10.2
+        imagePullPolicy: Always
         command:
           - mlflow
           - server

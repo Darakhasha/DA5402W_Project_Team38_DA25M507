@@ -68,11 +68,11 @@ jobs:
 
       - name: Build MLflow image
         run: |
-          docker build -f Dockerfile.mlflow -t ghcr.io/darakhasha/mlflow:2.10.2 .
+           docker build -f Dockerfile.mlflow -t ghcr.io/darakhasha/mlflow:${{ github.sha }} .
 
       - name: Push MLflow image
         run: |
-          docker push ghcr.io/darakhasha/mlflow:2.10.2    
+          docker push ghcr.io/darakhasha/mlflow:${{ github.sha }}
 
       - name: Build Docker image
         run: |
@@ -145,8 +145,13 @@ jobs:
 
       - name: Deploy MLflow
         run: |
-          kubectl apply -f k8s/mlflow.yaml
+          kubectl apply -f k8s/mlflow.yaml 
+          kubectl set image deployment/mlflow mlflow=ghcr.io/darakhasha/mlflow:${{ github.sha }}
           kubectl rollout status deployment/mlflow --timeout=120s
+
+      - name: Verify MLflow image
+        run: |
+          kubectl get deployment mlflow -o jsonpath="{.spec.template.spec.containers[0].image}"    
 
       - name: Trigger Model Training Job
         run: |
