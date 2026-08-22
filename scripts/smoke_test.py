@@ -10,8 +10,56 @@ SERVICE_PORT = 8000
 
 def main():
 
-    print("Starting smoke test...")
-    print("Port-forwarding taxi-api-service...")
+    print("=== SMOKE TEST START ===")
+
+    # --------------------------------------------------
+    # 1. Show Kubernetes state
+    # --------------------------------------------------
+
+    print("\n=== PODS ===")
+
+    subprocess.run(
+        [
+            "kubectl",
+            "get",
+            "pods",
+            "-l",
+            "app=taxi-api",
+            "-o",
+            "wide",
+        ],
+        check=False,
+    )
+
+    print("\n=== SERVICE ===")
+
+    subprocess.run(
+        [
+            "kubectl",
+            "get",
+            "svc",
+            "taxi-api-service",
+        ],
+        check=False,
+    )
+
+    print("\n=== ENDPOINTS ===")
+
+    subprocess.run(
+        [
+            "kubectl",
+            "get",
+            "endpoints",
+            "taxi-api-service",
+        ],
+        check=False,
+    )
+
+    # --------------------------------------------------
+    # 2. Start port-forward
+    # --------------------------------------------------
+
+    print("\n=== STARTING PORT FORWARD ===")
 
     process = subprocess.Popen(
         [
@@ -21,84 +69,107 @@ def main():
             f"{LOCAL_PORT}:{SERVICE_PORT}",
         ],
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         text=True,
+        bufsize=1,
     )
 
     try:
 
-        # Give kubectl time to start
-        print("Waiting for kubectl port-forward to start...")
+        # --------------------------------------------------
+        # 3. Wait for port-forward to become available
+        # --------------------------------------------------
 
-        for i in range(30):
+        print(
+            f"Waiting for port-forward "
+            f"127.0.0.1:{LOCAL_PORT}..."
+        )
 
-            # Check whether kubectl died
+        port_forward_ready = False
+
+        for _ in range(30):
+
             if process.poll() is not None:
-                stdout, stderr = process.communicate()
+
+                output = process.stdout.read()
+
+                print("\n=== PORT FORWARD FAILED ===")
+                print(output)
 
                 raise RuntimeError(
-                    "kubectl port-forward terminated unexpectedly.\n"
-                    f"STDOUT:\n{stdout}\n"
-                    f"STDERR:\n{stderr}"
+                    f"kubectl port-forward exited with "
+                    f"code {process.returncode}"
                 )
 
             try:
 
+                # Try the API
                 response = urllib.request.urlopen(
                     f"http://127.0.0.1:{LOCAL_PORT}/health",
-                    timeout=5,
+                    timeout=2,
                 )
-
-                status = response.status
 
                 print(
-                    f"Health endpoint responded with HTTP {status}"
+                    f"Health endpoint returned "
+                    f"HTTP {response.status}"
                 )
 
-                if status == 200:
-                    print("API health check passed.")
-                    return
+                if response.status == 200:
 
-                raise RuntimeError(
-                    f"Health endpoint returned HTTP {status}"
-                )
+                    port_forward_ready = True
+                    break
 
             except Exception as exc:
 
                 print(
-                    f"Attempt {i + 1}/30: API not ready yet "
-                    f"({exc})"
+                    f"API not ready yet: {exc}"
                 )
 
-                time.sleep(2)
+            time.sleep(2)
 
-        # If we reach here, all attempts failed
-        stdout, stderr = process.communicate(timeout=5)
+        # --------------------------------------------------
+        # 4. Final result
+        # --------------------------------------------------
 
-        raise RuntimeError(
-            "Smoke test timed out after 60 seconds.\n"
-            f"Port-forward STDOUT:\n{stdout}\n"
-            f"Port-forward STDERR:\n{stderr}"
-        )
+        if not port_forward_ready:
+
+            print("\n=== PORT FORWARD OUTPUT ===")
+
+            try:
+                output = process.stdout.read()
+                print(output)
+            except Exception:
+                pass
+
+            raise RuntimeError(
+                "API did not respond within 60 seconds."
+            )
+
+        print("\n=== SMOKE TEST PASSED ===")
 
     finally:
 
-        print("Stopping port-forward...")
+        print("\nStopping port-forward...")
 
         process.terminate()
 
         try:
+
             process.wait(timeout=10)
+
         except subprocess.TimeoutExpired:
+
             process.kill()
 
 
 if __name__ == "__main__":
 
     try:
+
         main()
 
     except Exception as exc:
 
-        print(f"Smoke test failed: {exc}")
+        print(f"\nSmoke test failed: {exc}")
+
         sys.exit(1)
