@@ -167,27 +167,12 @@ jobs:
           print('Resetting Airflow public schema...')
           subprocess.run(['kubectl', 'exec', 'deployment/airflow-postgres', '--', 'psql', '-U', 'airflow', '-d', 'airflow', '-c', 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'], check=True)
 
-      - name: Deploy & Migrate MLflow Database
-        shell: python
-        env:
-          COMMIT_SHA: ${{ github.sha }}
+      - name: Deploy & Restart MLflow
         run: |
-          import subprocess, os, time
-
-          sha = os.environ.get('COMMIT_SHA')
-          subprocess.run(['kubectl', 'apply', '-f', 'k8s/mlflow.yaml'], check=True)
-          subprocess.run(['kubectl', 'set', 'image', 'deployment/mlflow', f'mlflow=ghcr.io/darakhasha/mlflow:{sha}'], check=True)
-          subprocess.run(['kubectl', 'rollout', 'status', 'deployment/mlflow', '--timeout=180s'], check=True)
-
-          print('Getting active MLflow pod name...')
-          pod_name = subprocess.run(['kubectl', 'get', 'pod', '-l', 'app=mlflow', '-o', 'jsonpath={.items[0].metadata.name}'], capture_output=True, text=True, check=True).stdout.strip()
-
-          print('Upgrading MLflow database schema...')
-          subprocess.run(['kubectl', 'exec', pod_name, '--', 'mlflow', 'db', 'upgrade', 'postgresql://airflow:airflow@airflow-postgres:5432/mlflow'], check=True)
-
-          print('Restarting MLflow to load migrated database cleanly...')
-          subprocess.run(['kubectl', 'rollout', 'restart', 'deployment/mlflow'], check=True)
-          subprocess.run(['kubectl', 'rollout', 'status', 'deployment/mlflow', '--timeout=180s'], check=True)
+          kubectl apply -f k8s/mlflow.yaml 
+          kubectl set image deployment/mlflow mlflow=ghcr.io/darakhasha/mlflow:${{ github.sha }}
+          kubectl rollout restart deployment/mlflow
+          kubectl rollout status deployment/mlflow --timeout=180s
 
       - name: Trigger Model Training Job
         run: |
@@ -227,7 +212,7 @@ jobs:
           if os.path.exists(local_parquet):
               run_cmd(['kubectl', 'cp', local_parquet, pod_name + ':/opt/airflow/data/raw/yellow_tripdata_2024-01.parquet', '-c', 'airflow'])
 
-          # 5. Install DuckDB and PySpark cleanly inside Airflow pod
+          # 5. Install DuckDB and PySpark cleanly inside Airflow container
           run_cmd(['kubectl', 'exec', pod_name, '-c', 'airflow', '--', 'bash', '-c', 'export PIP_USER=false && python3 -m pip install duckdb pyspark'])
 
           # 6. Reserialize DAGs
