@@ -78,6 +78,15 @@ jobs:
       - name: Verify MinIO rollout
         run: kubectl rollout status deployment/minio --timeout=120s
 
+      - name: Create MLflow Models Bucket in MinIO
+        run: |
+          python -c "
+          import subprocess
+          print('Ensuring MLflow models bucket exists in MinIO...')
+          subprocess.run(['kubectl', 'exec', 'deployment/minio', '--', 'mc', 'alias', 'set', 'myminio', 'http://localhost:9000', 'minioadmin', 'minioadmin'], check=True)
+          subprocess.run(['kubectl', 'exec', 'deployment/minio', '--', 'mc', 'mb', '--ignore-existing', 'myminio/models'], check=True)
+          "
+
       - name: Initialize MinIO Bucket
         run: |
           kubectl apply -f k8s/minio-init-job.yaml
@@ -132,8 +141,6 @@ jobs:
           kubectl delete deployment mlflow --ignore-not-found=true
           echo "Cleaned up old workload resources."
 
-
-
       - name: Deploy Postgres Metastore & Prepare Databases
         run: |
           python -c "
@@ -155,7 +162,6 @@ jobs:
               time.sleep(2)
 
           print('Creating MLflow database...')
-          # Does not use check=True so it safely continues if database already exists
           subprocess.run(['kubectl', 'exec', 'deployment/airflow-postgres', '--', 'psql', '-U', 'airflow', '-d', 'airflow', '-c', 'CREATE DATABASE mlflow;'])
 
           print('Resetting Airflow public schema...')
@@ -176,15 +182,43 @@ jobs:
         run: |
           kubectl apply -f k8s/pipeline-2-training.yaml
 
-      - name: Deploy Airflow
+      - name: Deploy Airflow & Provision DuckDB
         run: |
-          kubectl create configmap airflow-dags --from-file=dags/ --dry-run=client -o yaml | kubectl apply -f -
-          kubectl create configmap airflow-src --from-file=src/ --dry-run=client -o yaml | kubectl apply -f -
-          kubectl create configmap airflow-scripts --from-file=scripts/ --dry-run=client -o yaml | kubectl apply -f -
-          
-          # Deploy Airflow (airflow-init container handles database creation automatically)
-          kubectl apply -f k8s/airflow.yaml
-          kubectl rollout status deployment/airflow --timeout=300s
+          python -c "
+          import subprocess
+          import os
+
+          def run_cmd(cmd, check=True):
+              print(f'--> Running: {\" \".join(cmd)}')
+              return subprocess.run(cmd, check=check, capture_output=True, text=True)
+
+          # 1. Apply ConfigMaps cleanly without shell pipe dependency
+          for cm, folder in [('airflow-dags', 'dags/'), ('airflow-src', 'src/'), ('airflow-scripts', 'scripts/')]:
+              if os.path.exists(folder):
+                  cm_yaml = run_cmd(['kubectl', 'create', 'configmap', cm, f'--from-file={folder}', '--dry-run=client', '-o', 'yaml']).stdout
+                  p = subprocess.Popen(['kubectl', 'apply', '-f', '-'], stdin=subprocess.PIPE, text=True)
+                  p.communicate(input=cm_yaml)
+
+          # 2. Deploy Airflow
+          run_cmd(['kubectl', 'apply', '-f', 'k8s/airflow.yaml'])
+          run_cmd(['kubectl', 'rollout', 'status', 'deployment/airflow', '--timeout=300s'])
+
+          # 3. Resolve active Pod name
+          pod_name = run_cmd(['kubectl', 'get', 'pod', '-l', 'app=airflow', '-o', 'jsonpath={.items[0].metadata.name}']).stdout.strip()
+
+          # 4. Create raw data path & seed dataset
+          run_cmd(['kubectl', 'exec', pod_name, '-c', 'airflow', '--', 'mkdir', '-p', '/opt/airflow/data/raw'])
+          local_parquet = 'data/raw/yellow_tripdata_2024-01.parquet'
+          if os.path.exists(local_parquet):
+              run_cmd(['kubectl', 'cp', local_parquet, f'{pod_name}:/opt/airflow/data/raw/yellow_tripdata_2024-01.parquet', '-c', 'airflow'])
+
+          # 5. Install DuckDB inside container (No Java needed!)
+          run_cmd(['kubectl', 'exec', pod_name, '-c', 'airflow', '--', 'python3', '-m', 'pip', 'install', '--user', 'duckdb'])
+
+          # 6. Reserialize DAGs
+          run_cmd(['kubectl', 'exec', pod_name, '-c', 'airflow', '--', 'airflow', 'dags', 'reserialize'])
+          print('Airflow deployment and DuckDB installation completed successfully!')
+          "
 
       - name: Deploy deployment.yml
         run: kubectl apply -f k8s/deployment.yaml
