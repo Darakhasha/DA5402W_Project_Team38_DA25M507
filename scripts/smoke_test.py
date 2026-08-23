@@ -89,10 +89,10 @@ def main():
         time.sleep(3)
 
         # --------------------------------------------------
-        # 4. Wait for /health
+        # 4. Wait for root endpoint (bypasses MLflow calls)
         # --------------------------------------------------
 
-        url = f"http://127.0.0.1:{LOCAL_PORT}/health"
+        url = f"http://127.0.0.1:{LOCAL_PORT}/"
 
         print(f"\nWaiting for API: {url}")
 

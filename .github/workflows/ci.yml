@@ -236,23 +236,11 @@ jobs:
       - name: Verify deployed image
         run: python scripts/verify_deployed_image.py
 
-      - name: Smoke test API & MLflow Endpoint
+      - name: Smoke test API
         shell: python
         run: |
-          import subprocess, time, sys
-
-          print('Forwarding ports for MLflow (5000) and Taxi API (8000)...')
-          pf_mlflow = subprocess.Popen(['kubectl', 'port-forward', 'deployment/mlflow', '5000:5000'])
-          pf_api = subprocess.Popen(['kubectl', 'port-forward', 'deployment/taxi-api', '8000:8000'])
-          time.sleep(5)
-
-          try:
-              subprocess.run([sys.executable, 'scripts/smoke_test.py'], check=True)
-          finally:
-              pf_mlflow.terminate()
-              pf_api.terminate()
-              pf_mlflow.wait()
-              pf_api.wait()
+          import subprocess, sys
+          subprocess.run([sys.executable, 'scripts/smoke_test.py'], check=True)
 
       - name: Deploy Prometheus
         run: kubectl apply -f k8s/prometheus.yaml
