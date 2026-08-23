@@ -75,6 +75,8 @@ jobs:
       - name: Clean Up Existing State
         run: |
           kubectl delete deployment minio --ignore-not-found=true --wait=true
+          kubectl delete pod -l app=minio --force --grace-period=0 --ignore-not-found=true
+          python -c "import time; time.sleep(5)"
           kubectl delete deployment airflow-postgres --ignore-not-found=true
           kubectl delete svc airflow-postgres --ignore-not-found=true
           kubectl delete deployment airflow --ignore-not-found=true
