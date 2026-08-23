@@ -133,21 +133,24 @@ jobs:
           echo "Cleaned up old workload resources."
 
       - name: Deploy Postgres Metastore & Prepare Databases
+        shell: bash
         run: |
           kubectl apply -f k8s/postgres.yaml
+          kubectl rollout status deployment/airflow-postgres --timeout=200s
 
-          # 1. Wait until PostgreSQL is actually ready to accept socket connections
+          # 1. Wait until PostgreSQL internal socket is ready
           until kubectl exec deployment/airflow-postgres -- pg_isready -U airflow -d airflow; do
             echo "Waiting for PostgreSQL database engine..."
             sleep 2
           done
 
-          # 2. Create dedicated database for MLflow (ignores error if it exists)
+          # 2. Create dedicated database for MLflow
           kubectl exec deployment/airflow-postgres -- psql -U airflow -d airflow -c "CREATE DATABASE mlflow;" || true
 
-          # 3. Reset public schema in airflow database for clean setup
+          # 3. Reset public schema in airflow database
           kubectl exec deployment/airflow-postgres -- psql -U airflow -d airflow -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
 
+          
       - name: Deploy MLflow
         run: |
           kubectl apply -f k8s/mlflow.yaml 
