@@ -50,7 +50,7 @@ with DAG(
    # 3. Run Spark batch aggregation on Kafka stream
     task_spark_batch = BashOperator(
         task_id='run_spark_batch_aggregation',
-        bash_command='cd /opt/airflow && python3 -m pip install --user duckdb && python src/streaming_pipeline.py',
+        bash_command='export PIP_USER=false && python3 -m pip install duckdb && cd /opt/airflow && python src/streaming_pipeline.py',
     )
 
 

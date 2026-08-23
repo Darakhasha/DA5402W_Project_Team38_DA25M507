@@ -99,10 +99,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }} 
         run: |
           python -c "
-          import os
-          import subprocess
-          import time
-          import sys
+          import os, subprocess, time, sys
 
           print('Starting MinIO port-forwarding...')
           pf_process = subprocess.Popen(['kubectl', 'port-forward', 'deployment/minio', '9000:9000'])
@@ -119,7 +116,7 @@ jobs:
               try:
                   subprocess.run(['dvc', 'pull'], check=True)
               except subprocess.CalledProcessError:
-                  print('Warning: DVC pull skipped or failed because remote storage is empty. Proceeding with raw data generation.')
+                  print('Warning: DVC pull skipped or failed because remote storage is empty.')
               
               subprocess.run([sys.executable, 'scripts/process_data.py', '--input', 'data/raw/yellow_tripdata_2024-01.parquet', '--output', 'data/processed/taxi_demand_features.parquet'], check=True)
               subprocess.run([sys.executable, 'scripts/upload_file.py', '--bucket', 'data-files', '--filepath', 'data/processed/taxi_demand_features.parquet', '--dest-path', 'data/processed/taxi_demand_features.parquet'], check=True)
@@ -144,8 +141,7 @@ jobs:
       - name: Deploy Postgres Metastore & Prepare Databases
         run: |
           python -c "
-          import subprocess
-          import time
+          import subprocess, time
 
           print('Applying PostgreSQL manifest...')
           subprocess.run(['kubectl', 'apply', '-f', 'k8s/postgres.yaml'], check=True)
@@ -161,17 +157,19 @@ jobs:
                   break
               time.sleep(2)
 
-          print('Creating MLflow database...')
-          subprocess.run(['kubectl', 'exec', 'deployment/airflow-postgres', '--', 'psql', '-U', 'airflow', '-d', 'airflow', '-c', 'CREATE DATABASE mlflow;'])
+          print('Safely creating MLflow database...')
+          safe_db_sql = \"SELECT 'CREATE DATABASE mlflow' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'mlflow')\\\\gexec\"
+          subprocess.run(['kubectl', 'exec', 'deployment/airflow-postgres', '--', 'psql', '-U', 'airflow', '-d', 'airflow', '-c', safe_db_sql])
 
           print('Resetting Airflow public schema...')
           subprocess.run(['kubectl', 'exec', 'deployment/airflow-postgres', '--', 'psql', '-U', 'airflow', '-d', 'airflow', '-c', 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'], check=True)
           "
 
-      - name: Deploy MLflow
+      - name: Deploy & Restart MLflow
         run: |
           kubectl apply -f k8s/mlflow.yaml 
           kubectl set image deployment/mlflow mlflow=ghcr.io/darakhasha/mlflow:${{ github.sha }}
+          kubectl rollout restart deployment/mlflow
           kubectl rollout status deployment/mlflow --timeout=180s
 
       - name: Verify MLflow image
@@ -182,15 +180,13 @@ jobs:
         run: |
           kubectl apply -f k8s/pipeline-2-training.yaml
 
-      - name: Deploy Airflow & Seed Raw Data
+      - name: Deploy Airflow & Install DuckDB
         run: |
           python -c "
-          import subprocess
-          import os
+          import subprocess, os
 
           def run_cmd(cmd, check=True):
-              cmd_str = ' '.join(cmd)
-              print('--> Running: ' + cmd_str)
+              print('--> Running: ' + ' '.join(cmd))
               res = subprocess.run(cmd, capture_output=True, text=True)
               if check and res.returncode != 0:
                   print('STDOUT:', res.stdout)
@@ -218,9 +214,12 @@ jobs:
           if os.path.exists(local_parquet):
               run_cmd(['kubectl', 'cp', local_parquet, pod_name + ':/opt/airflow/data/raw/yellow_tripdata_2024-01.parquet', '-c', 'airflow'])
 
-          # 5. Reserialize DAGs
+          # 5. Install DuckDB without PIP_USER conflicts
+          run_cmd(['kubectl', 'exec', pod_name, '-c', 'airflow', '--', 'bash', '-c', 'export PIP_USER=false && python3 -m pip install duckdb'])
+
+          # 6. Reserialize DAGs
           run_cmd(['kubectl', 'exec', pod_name, '-c', 'airflow', '--', 'airflow', 'dags', 'reserialize'])
-          print('Airflow deployment completed successfully!')
+          print('Airflow deployment and DuckDB installation succeeded!')
           "
 
       - name: Deploy deployment.yml
@@ -240,8 +239,24 @@ jobs:
       - name: Verify deployed image
         run: python scripts/verify_deployed_image.py
 
-      - name: Smoke test API
-        run: python scripts/smoke_test.py
+      - name: Smoke test API & MLflow Endpoint
+        run: |
+          python -c "
+          import subprocess, time, sys
+
+          print('Forwarding ports for MLflow (5000) and Taxi API (8000)...')
+          pf_mlflow = subprocess.Popen(['kubectl', 'port-forward', 'deployment/mlflow', '5000:5000'])
+          pf_api = subprocess.Popen(['kubectl', 'port-forward', 'deployment/taxi-api', '8000:8000'])
+          time.sleep(5)
+
+          try:
+              subprocess.run([sys.executable, 'scripts/smoke_test.py'], check=True)
+          finally:
+              pf_mlflow.terminate()
+              pf_api.terminate()
+              pf_mlflow.wait()
+              pf_api.wait()
+          "
 
       - name: Deploy Prometheus
         run: kubectl apply -f k8s/prometheus.yaml
@@ -289,10 +304,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }}
         run: |
           python -c "
-          import os
-          import subprocess
-          import time
-          import sys
+          import os, subprocess, time, sys
 
           print('Starting MinIO port-forwarding...')
           pf_process = subprocess.Popen(['kubectl', 'port-forward', 'deployment/minio', '9000:9000'])
