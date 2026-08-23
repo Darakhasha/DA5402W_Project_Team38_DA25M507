@@ -189,13 +189,14 @@ jobs:
           import os
 
           def run_cmd(cmd, check=True):
-              print(f'--> Running: {\" \".join(cmd)}')
+              cmd_str = ' '.join(cmd)
+              print('--> Running: ' + cmd_str)
               return subprocess.run(cmd, check=check, capture_output=True, text=True)
 
-          # 1. Apply ConfigMaps cleanly without shell pipe dependency
+          # 1. Apply ConfigMaps cleanly
           for cm, folder in [('airflow-dags', 'dags/'), ('airflow-src', 'src/'), ('airflow-scripts', 'scripts/')]:
               if os.path.exists(folder):
-                  cm_yaml = run_cmd(['kubectl', 'create', 'configmap', cm, f'--from-file={folder}', '--dry-run=client', '-o', 'yaml']).stdout
+                  cm_yaml = run_cmd(['kubectl', 'create', 'configmap', cm, '--from-file=' + folder, '--dry-run=client', '-o', 'yaml']).stdout
                   p = subprocess.Popen(['kubectl', 'apply', '-f', '-'], stdin=subprocess.PIPE, text=True)
                   p.communicate(input=cm_yaml)
 
@@ -210,9 +211,9 @@ jobs:
           run_cmd(['kubectl', 'exec', pod_name, '-c', 'airflow', '--', 'mkdir', '-p', '/opt/airflow/data/raw'])
           local_parquet = 'data/raw/yellow_tripdata_2024-01.parquet'
           if os.path.exists(local_parquet):
-              run_cmd(['kubectl', 'cp', local_parquet, f'{pod_name}:/opt/airflow/data/raw/yellow_tripdata_2024-01.parquet', '-c', 'airflow'])
+              run_cmd(['kubectl', 'cp', local_parquet, pod_name + ':/opt/airflow/data/raw/yellow_tripdata_2024-01.parquet', '-c', 'airflow'])
 
-          # 5. Install DuckDB inside container (No Java needed!)
+          # 5. Install DuckDB inside container (No Java needed)
           run_cmd(['kubectl', 'exec', pod_name, '-c', 'airflow', '--', 'python3', '-m', 'pip', 'install', '--user', 'duckdb'])
 
           # 6. Reserialize DAGs
