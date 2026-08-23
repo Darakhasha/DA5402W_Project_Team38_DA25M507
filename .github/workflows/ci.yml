@@ -79,13 +79,12 @@ jobs:
         run: kubectl rollout status deployment/minio --timeout=120s
 
       - name: Create MLflow Models Bucket in MinIO
+        shell: python
         run: |
-          python -c "
           import subprocess
           print('Ensuring MLflow models bucket exists in MinIO...')
           subprocess.run(['kubectl', 'exec', 'deployment/minio', '--', 'mc', 'alias', 'set', 'myminio', 'http://localhost:9000', 'minioadmin', 'minioadmin'], check=True)
           subprocess.run(['kubectl', 'exec', 'deployment/minio', '--', 'mc', 'mb', '--ignore-existing', 'myminio/models'], check=True)
-          "
 
       - name: Initialize MinIO Bucket
         run: |
@@ -93,12 +92,12 @@ jobs:
           kubectl wait --for=condition=complete job/minio-init-job --timeout=60s  
 
       - name: Seed MinIO with Processed Data for CI Tests
+        shell: python
         env:
           MINIO_ENDPOINT: "http://127.0.0.1:9000"
           AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ACCESS_KEY }} 
           AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }} 
         run: |
-          python -c "
           import os, subprocess, time, sys
 
           print('Starting MinIO port-forwarding...')
@@ -123,7 +122,6 @@ jobs:
           finally:
               pf_process.terminate()
               pf_process.wait()
-          "
 
       - name: Deploy Ingestion CronJob
         run: |
@@ -139,14 +137,14 @@ jobs:
           echo "Cleaned up old workload resources."
 
       - name: Deploy Postgres Metastore & Prepare Databases
+        shell: python
         run: |
-          python -c "
           import subprocess, time
 
           print('Applying PostgreSQL manifest...')
           subprocess.run(['kubectl', 'apply', '-f', 'k8s/postgres.yaml'], check=True)
 
-          print('Waiting for PostgreSQL engine to accept connections...')
+          print('Waiting for PostgreSQL engine...')
           while True:
               res = subprocess.run(
                   ['kubectl', 'exec', 'deployment/airflow-postgres', '--', 'pg_isready', '-U', 'airflow', '-d', 'airflow'],
@@ -157,13 +155,19 @@ jobs:
                   break
               time.sleep(2)
 
-          print('Safely creating MLflow database...')
-          safe_db_sql = \"SELECT 'CREATE DATABASE mlflow' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'mlflow')\\\\gexec\"
-          subprocess.run(['kubectl', 'exec', 'deployment/airflow-postgres', '--', 'psql', '-U', 'airflow', '-d', 'airflow', '-c', safe_db_sql])
+          print('Checking MLflow database...')
+          chk = subprocess.run(
+              ['kubectl', 'exec', 'deployment/airflow-postgres', '--', 'psql', '-U', 'airflow', '-d', 'airflow', '-tAc', "SELECT 1 FROM pg_database WHERE datname='mlflow'"],
+              capture_output=True, text=True
+          )
+          if '1' not in chk.stdout:
+              print('Creating MLflow database...')
+              subprocess.run(['kubectl', 'exec', 'deployment/airflow-postgres', '--', 'psql', '-U', 'airflow', '-d', 'airflow', '-c', 'CREATE DATABASE mlflow;'], check=True)
+          else:
+              print('MLflow database already exists.')
 
           print('Resetting Airflow public schema...')
           subprocess.run(['kubectl', 'exec', 'deployment/airflow-postgres', '--', 'psql', '-U', 'airflow', '-d', 'airflow', '-c', 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'], check=True)
-          "
 
       - name: Deploy & Restart MLflow
         run: |
@@ -181,8 +185,8 @@ jobs:
           kubectl apply -f k8s/pipeline-2-training.yaml
 
       - name: Deploy Airflow & Install DuckDB
+        shell: python
         run: |
-          python -c "
           import subprocess, os
 
           def run_cmd(cmd, check=True):
@@ -194,7 +198,7 @@ jobs:
                   raise subprocess.CalledProcessError(res.returncode, cmd, res.stdout, res.stderr)
               return res
 
-          # 1. Apply ConfigMaps cleanly
+          # 1. Apply ConfigMaps
           for cm, folder in [('airflow-dags', 'dags/'), ('airflow-src', 'src/'), ('airflow-scripts', 'scripts/')]:
               if os.path.exists(folder):
                   cm_yaml = run_cmd(['kubectl', 'create', 'configmap', cm, '--from-file=' + folder, '--dry-run=client', '-o', 'yaml']).stdout
@@ -214,13 +218,12 @@ jobs:
           if os.path.exists(local_parquet):
               run_cmd(['kubectl', 'cp', local_parquet, pod_name + ':/opt/airflow/data/raw/yellow_tripdata_2024-01.parquet', '-c', 'airflow'])
 
-          # 5. Install DuckDB without PIP_USER conflicts
+          # 5. Install DuckDB
           run_cmd(['kubectl', 'exec', pod_name, '-c', 'airflow', '--', 'bash', '-c', 'export PIP_USER=false && python3 -m pip install duckdb'])
 
           # 6. Reserialize DAGs
           run_cmd(['kubectl', 'exec', pod_name, '-c', 'airflow', '--', 'airflow', 'dags', 'reserialize'])
           print('Airflow deployment and DuckDB installation succeeded!')
-          "
 
       - name: Deploy deployment.yml
         run: kubectl apply -f k8s/deployment.yaml
@@ -240,8 +243,8 @@ jobs:
         run: python scripts/verify_deployed_image.py
 
       - name: Smoke test API & MLflow Endpoint
+        shell: python
         run: |
-          python -c "
           import subprocess, time, sys
 
           print('Forwarding ports for MLflow (5000) and Taxi API (8000)...')
@@ -256,7 +259,6 @@ jobs:
               pf_api.terminate()
               pf_mlflow.wait()
               pf_api.wait()
-          "
 
       - name: Deploy Prometheus
         run: kubectl apply -f k8s/prometheus.yaml
@@ -299,11 +301,11 @@ jobs:
           kubectl rollout status deployment/simulated-label-producer --timeout=300s  
 
       - name: Configure and Push DVC
+        shell: python
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }}
         run: |
-          python -c "
           import os, subprocess, time, sys
 
           print('Starting MinIO port-forwarding...')
@@ -319,6 +321,5 @@ jobs:
               subprocess.run(['dvc', 'push'], check=True)
                 
           finally:
-                pf_process.terminate()
-                pf_process.wait()
-          "
+              pf_process.terminate()
+              pf_process.wait()
