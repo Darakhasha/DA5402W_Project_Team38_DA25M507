@@ -132,25 +132,36 @@ jobs:
           kubectl delete deployment mlflow --ignore-not-found=true
           echo "Cleaned up old workload resources."
 
+
+
       - name: Deploy Postgres Metastore & Prepare Databases
-        shell: bash
         run: |
-          kubectl apply -f k8s/postgres.yaml
-          kubectl rollout status deployment/airflow-postgres --timeout=200s
+          python -c "
+          import subprocess
+          import time
 
-          # 1. Wait until PostgreSQL internal socket is ready
-          until kubectl exec deployment/airflow-postgres -- pg_isready -U airflow -d airflow; do
-            echo "Waiting for PostgreSQL database engine..."
-            sleep 2
-          done
+          print('Applying PostgreSQL manifest...')
+          subprocess.run(['kubectl', 'apply', '-f', 'k8s/postgres.yaml'], check=True)
 
-          # 2. Create dedicated database for MLflow
-          kubectl exec deployment/airflow-postgres -- psql -U airflow -d airflow -c "CREATE DATABASE mlflow;" || true
+          print('Waiting for PostgreSQL engine to accept connections...')
+          while True:
+              res = subprocess.run(
+                  ['kubectl', 'exec', 'deployment/airflow-postgres', '--', 'pg_isready', '-U', 'airflow', '-d', 'airflow'],
+                  capture_output=True
+              )
+              if res.returncode == 0:
+                  print('PostgreSQL is ready!')
+                  break
+              time.sleep(2)
 
-          # 3. Reset public schema in airflow database
-          kubectl exec deployment/airflow-postgres -- psql -U airflow -d airflow -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+          print('Creating MLflow database...')
+          # Does not use check=True so it safely continues if database already exists
+          subprocess.run(['kubectl', 'exec', 'deployment/airflow-postgres', '--', 'psql', '-U', 'airflow', '-d', 'airflow', '-c', 'CREATE DATABASE mlflow;'])
 
-          
+          print('Resetting Airflow public schema...')
+          subprocess.run(['kubectl', 'exec', 'deployment/airflow-postgres', '--', 'psql', '-U', 'airflow', '-d', 'airflow', '-c', 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'], check=True)
+          "
+
       - name: Deploy MLflow
         run: |
           kubectl apply -f k8s/mlflow.yaml 
