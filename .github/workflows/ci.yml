@@ -137,11 +137,20 @@ jobs:
           kubectl apply -f k8s/postgres.yaml
           kubectl rollout status deployment/airflow-postgres --timeout=200s
 
-          # 1. Create dedicated database for MLflow (ignores error if already exists)
-          kubectl exec deployment/airflow-postgres -- psql -U airflow -d airflow -c "CREATE DATABASE mlflow;"  
+          # 1. Wait for PostgreSQL TCP engine to start accepting connections
+          kubectl exec deployment/airflow-postgres -- sh -c '
+            until pg_isready -h 127.0.0.1 -U airflow; do
+              echo "Waiting for Postgres connection..."
+              sleep 2
+            done
+          '
 
-          # 2. Reset public schema in default 'airflow' database before deployment
-          kubectl exec deployment/airflow-postgres -- psql -U airflow -d airflow -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+          # 2. Execute DB creation and schema reset safely inside the container shell
+          kubectl exec deployment/airflow-postgres -- sh -c '
+            export PGPASSWORD=airflow
+            psql -h 127.0.0.1 -U airflow -d airflow -c "CREATE DATABASE mlflow;" || true
+            psql -h 127.0.0.1 -U airflow -d airflow -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+          '
 
       - name: Deploy MLflow
         run: |
