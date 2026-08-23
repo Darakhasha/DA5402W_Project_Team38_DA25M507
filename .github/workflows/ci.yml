@@ -72,14 +72,14 @@ jobs:
         run: |
           docker push ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
-      - name: Clean up existing MinIO deployment
-        run: kubectl delete deployment minio --ignore-not-found=true
-
-      - name: Deploy MinIO Workload
-        run: kubectl apply -f k8s/minio.yaml
-        
-      - name: Verify MinIO rollout
-        run: kubectl rollout status deployment/minio --timeout=180s
+      - name: Clean Up Existing State
+        run: |
+          kubectl delete deployment minio --ignore-not-found=true --wait=true
+          kubectl delete deployment airflow-postgres --ignore-not-found=true
+          kubectl delete svc airflow-postgres --ignore-not-found=true
+          kubectl delete deployment airflow --ignore-not-found=true
+          kubectl delete deployment mlflow --ignore-not-found=true
+          echo "Cleaned up old workload resources."
 
       - name: Deploy MinIO Workload
         run: kubectl apply -f k8s/minio.yaml
@@ -270,10 +270,7 @@ jobs:
         run: |
           kubectl exec deployment/kafka -- /opt/kafka/bin/kafka-topics.sh --create --if-not-exists --topic taxi-events --bootstrap-server kafka:9092 --partitions 1 --replication-factor 1  
 
-      - name: Verify MinIO rollout
-        run: |
-          kubectl rollout status deployment/minio --timeout=120s
-
+      
       - name: Deploy drift monitor
         run: kubectl apply -f k8s/drift-monitor.yaml
 
