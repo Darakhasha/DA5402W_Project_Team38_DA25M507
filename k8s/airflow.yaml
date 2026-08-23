@@ -29,13 +29,12 @@ spec:
               mkdir -p /opt/airflow/data/raw
               mkdir -p /opt/airflow/data/processed
 
-              echo "Waiting for PostgreSQL database..."
-              until airflow db check; do
-                echo "Database not ready yet, sleeping 5s..."
-                sleep 5
+              echo "Waiting for PostgreSQL..."
+              while ! nc -z airflow-postgres 5432; do
+                sleep 2
               done
 
-              echo "Initializing clean database schema..."
+              echo "Checking/Initializing database schema..."
               airflow db init
 
               echo "Creating default admin user..."
