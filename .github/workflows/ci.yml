@@ -182,7 +182,7 @@ jobs:
         run: |
           kubectl apply -f k8s/pipeline-2-training.yaml
 
-      - name: Deploy Airflow & Provision DuckDB
+      - name: Deploy Airflow & Seed Raw Data
         run: |
           python -c "
           import subprocess
@@ -191,7 +191,12 @@ jobs:
           def run_cmd(cmd, check=True):
               cmd_str = ' '.join(cmd)
               print('--> Running: ' + cmd_str)
-              return subprocess.run(cmd, check=check, capture_output=True, text=True)
+              res = subprocess.run(cmd, capture_output=True, text=True)
+              if check and res.returncode != 0:
+                  print('STDOUT:', res.stdout)
+                  print('STDERR:', res.stderr)
+                  raise subprocess.CalledProcessError(res.returncode, cmd, res.stdout, res.stderr)
+              return res
 
           # 1. Apply ConfigMaps cleanly
           for cm, folder in [('airflow-dags', 'dags/'), ('airflow-src', 'src/'), ('airflow-scripts', 'scripts/')]:
@@ -213,12 +218,9 @@ jobs:
           if os.path.exists(local_parquet):
               run_cmd(['kubectl', 'cp', local_parquet, pod_name + ':/opt/airflow/data/raw/yellow_tripdata_2024-01.parquet', '-c', 'airflow'])
 
-          # 5. Install DuckDB inside container (No Java needed)
-          run_cmd(['kubectl', 'exec', pod_name, '-c', 'airflow', '--', 'python3', '-m', 'pip', 'install', '--user', 'duckdb'])
-
-          # 6. Reserialize DAGs
+          # 5. Reserialize DAGs
           run_cmd(['kubectl', 'exec', pod_name, '-c', 'airflow', '--', 'airflow', 'dags', 'reserialize'])
-          print('Airflow deployment and DuckDB installation completed successfully!')
+          print('Airflow deployment completed successfully!')
           "
 
       - name: Deploy deployment.yml
