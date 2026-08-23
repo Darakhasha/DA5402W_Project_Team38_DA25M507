@@ -20,7 +20,7 @@ with DAG(
     'taxi_demand_data_engineering_pipeline',
     default_args=default_args,
     description='Automated pipeline for taxi demand data cleaning, feature engineering, and DVC tracking',
-    schedule_interval='@daily',
+    schedule_interval='*/5 * * * *',#'@daily',
     catchup=False,
 ) as dag:
 

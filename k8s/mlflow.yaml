@@ -14,12 +14,12 @@ spec:
     spec:
       containers:
       - name: mlflow
-        image: ghcr.io/darakhasha/mlflow:latest  #ghcr.io/mlflow/mlflow:v2.10.2
+        image: ghcr.io/darakhasha/mlflow:latest
         imagePullPolicy: Always
         command:
           - mlflow
           - server
-          - --backend-store-uri=postgresql://airflow:airflow@airflow-postgres:5432/airflow
+          - --backend-store-uri=postgresql://airflow:airflow@airflow-postgres:5432/mlflow
           - --default-artifact-root=s3://models/
           - --host=0.0.0.0
           - --port=5000
