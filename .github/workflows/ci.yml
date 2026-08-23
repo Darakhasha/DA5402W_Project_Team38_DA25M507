@@ -149,7 +149,7 @@ jobs:
       - name: Deploy Postgres Metastore
         run: |
           kubectl apply -f k8s/postgres.yaml
-          kubectl rollout status deployment/airflow-postgres --timeout=120s
+          kubectl rollout status deployment/airflow-postgres --timeout=200s
 
       - name: Deploy MLflow
         run: |
@@ -168,8 +168,13 @@ jobs:
       
       - name: Deploy Airflow
         run: |
+          kubectl create configmap airflow-dags --from-file=dags/ --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create configmap airflow-src --from-file=src/ --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create configmap airflow-scripts --from-file=scripts/ --dry-run=client -o yaml | kubectl apply -f -
           kubectl apply -f k8s/airflow.yaml
-          kubectl rollout status deployment/airflow --timeout=300s
+          kubectl exec deployment/airflow-postgres -- psql -U airflow -d airflow -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+          kubectl rollout restart deployment/airflow  --timeout=300s
+          kubectl rollout status deployment/airflow   --timeout=300s
         #kubectl set image job/taxi-api  taxi-api=${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}    
 
       - name: Deploy deployment.yml
