@@ -83,9 +83,9 @@ jobs:
         run: |
           import subprocess
           print('Ensuring MLflow models bucket exists in MinIO...')
-          subprocess.run(['kubectl', 'exec', 'deployment/minio', '--', 'mc', 'alias', 'set', 'myminio', 'http://localhost:9000', 'minioadmin', 'minioadmin'], check=True)
+          subprocess.run(['kubectl', 'exec', 'deployment/minio', '--', 'mc', 'alias', 'set', 'myminio', 'http://127.0.0.1:9000', 'minioadmin', 'minioadmin'], check=True)
           subprocess.run(['kubectl', 'exec', 'deployment/minio', '--', 'mc', 'mb', '--ignore-existing', 'myminio/models'], check=True)
-
+          
       - name: Initialize MinIO Bucket
         run: |
           kubectl apply -f k8s/minio-init-job.yaml

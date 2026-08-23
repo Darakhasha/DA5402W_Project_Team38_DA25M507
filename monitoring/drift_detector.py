@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import boto3
+import numpy as np
 import pandas as pd
 from kafka import KafkaConsumer
 
@@ -24,7 +25,7 @@ REFERENCE_DATA = os.getenv(
     "REFERENCE_DATA", "data/processed/taxi_demand_features.parquet"
 )
 REFERENCE_PREDICTIONS = os.getenv(
-    "REFERENCE_PREDICTIONS", "data/reference_predictions.csv" 
+    "REFERENCE_PREDICTIONS", "data/reference_predictions.csv"
 )
 
 OBJECT_NAME = os.getenv("DATA_DEST_PATH", "data/")
@@ -104,7 +105,6 @@ def initialize_csv():
     output_path = Path(OUTPUT_FILE)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # 1. NEW: Try to restore existing state from MinIO first
     dest_object = f"{OBJECT_NAME.rstrip('/')}/{output_path.name}"
     restored = download_from_minio(dest_object, str(output_path))
     
@@ -112,7 +112,6 @@ def initialize_csv():
         print(f"[CSV] Restored historical state from MinIO: {dest_object}", flush=True)
         return
 
-    # 2. Only create a blank file if no history exists in MinIO
     if not output_path.exists():
         with output_path.open("w", newline="", encoding="utf-8") as file:
             writer = csv.DictWriter(file, fieldnames=CSV_COLUMNS)
@@ -191,7 +190,6 @@ def load_reference_data():
 
 
 def load_reference_predictions():
-   # download_from_minio("dummy/reference_predictions.csv", REFERENCE_PREDICTIONS)
     download_from_minio(REFERENCE_PREDICTIONS, REFERENCE_PREDICTIONS)
     path = Path(REFERENCE_PREDICTIONS)
     if not path.exists():
@@ -216,31 +214,38 @@ def calculate_psi(reference_values, current_values, bins=5):
     if not reference_values or not current_values:
         return 0.0
 
-    ref = [float(v) for v in reference_values]
-    cur = [float(v) for v in current_values]
+    ref = np.array([float(v) for v in reference_values])
+    cur = np.array([float(v) for v in current_values])
 
-    minimum, maximum = min(ref), max(ref)
-    if minimum == maximum:
+    if len(np.unique(ref)) <= 1:
         return 0.0
 
-    width = (maximum - minimum) / bins
-    ref_counts, cur_counts = [0] * bins, [0] * bins
+    # 1. Quantile bin edges based on reference dataset percentiles
+    percentiles = np.linspace(0, 100, bins + 1)
+    bin_edges = np.percentile(ref, percentiles)
+    bin_edges = np.unique(bin_edges)
 
-    for v in ref:
-        idx = max(0, min(int((v - minimum) / width), bins - 1))
-        ref_counts[idx] += 1
+    if len(bin_edges) <= 1:
+        return 0.0
 
-    for v in cur:
-        idx = max(0, min(int((v - minimum) / width), bins - 1))
-        cur_counts[idx] += 1
+    # 2. Adjust boundaries to capture values outside reference min/max
+    bin_edges[0] = min(bin_edges[0], np.min(cur)) - 1e-5
+    bin_edges[-1] = max(bin_edges[-1], np.max(cur)) + 1e-5
 
-    psi = 0.0
-    for i in range(bins):
-        ref_ratio = max(ref_counts[i] / len(ref), 0.0001)
-        cur_ratio = max(cur_counts[i] / len(cur), 0.0001)
-        psi += (cur_ratio - ref_ratio) * math.log(cur_ratio / ref_ratio)
+    # 3. Compute bin frequencies
+    ref_counts, _ = np.histogram(ref, bins=bin_edges)
+    cur_counts, _ = np.histogram(cur, bins=bin_edges)
 
-    return psi
+    n_bins = len(ref_counts)
+    ref_total = len(ref) + n_bins
+    cur_total = len(cur) + n_bins
+
+    # 4. Laplace (add-1) smoothing
+    ref_ratios = (ref_counts + 1) / ref_total
+    cur_ratios = (cur_counts + 1) / cur_total
+
+    psi = np.sum((cur_ratios - ref_ratios) * np.log(cur_ratios / ref_ratios))
+    return float(psi)
 
 
 def detect_feature_drift(reference_rows, current_events):
@@ -270,6 +275,9 @@ def detect_feature_drift(reference_rows, current_events):
             print(f"[ALERT] FEATURE DRIFT detected in column: {feature} (PSI={psi:.4f})", flush=True)
             drift_detected = True
 
+    if not drift_detected:
+        print("[DRIFT] SUCCESS: No feature drift detected across evaluation window.", flush=True)
+
     return drift_detected
 
 
@@ -293,6 +301,7 @@ def detect_prediction_drift(reference_predictions, current_events):
         print(f"[ALERT] PREDICTION DRIFT detected! PSI ({psi:.4f}) >= Threshold ({PSI_THRESHOLD})", flush=True)
         return True
 
+    print("[DRIFT] SUCCESS: No prediction drift detected across evaluation window.", flush=True)
     return False
 
 
