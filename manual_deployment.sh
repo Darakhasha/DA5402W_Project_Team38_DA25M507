@@ -9,6 +9,19 @@ IMAGE_NAME="taxi-api"
 IMAGE_TAG="latest"
 MLFLOW_IMAGE="ghcr.io/darakhasha/mlflow:latest"
 
+echo "2. Creating Kubernetes Secrets..."
+kubectl create secret generic minio-credentials \
+  --from-literal=AWS_ACCESS_KEY_ID="minioadmin" \
+  --from-literal=AWS_SECRET_ACCESS_KEY="minioadmin" \
+  --from-literal=MINIO_ENDPOINT="http://minio.default.svc.cluster.local:9000" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl create secret generic postgres-credentials \
+  --from-literal=POSTGRES_USER="airflow" \
+  --from-literal=POSTGRES_PASSWORD="airflow" \
+  --from-literal=POSTGRES_DB="airflow" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
 echo "1. Building Docker Images..."
 docker build -f Dockerfile.mlflow -t ${MLFLOW_IMAGE} .
 docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
@@ -36,6 +49,8 @@ dvc remote modify minio-store endpointurl "http://127.0.0.1:9000"
 dvc remote modify --local minio-store access_key_id minioadmin
 dvc remote modify --local minio-store secret_access_key minioadmin
 dvc pull || echo "Warning: DVC pull skipped or failed because remote storage is empty."
+
+
 
 python scripts/process_data.py --input data/raw/yellow_tripdata_2024-01.parquet --output data/processed/taxi_demand_features.parquet
 python scripts/upload_file.py --bucket data-files --filepath data/processed/taxi_demand_features.parquet --dest-path data/processed/taxi_demand_features.parquet

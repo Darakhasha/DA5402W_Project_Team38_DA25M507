@@ -188,7 +188,8 @@ jobs:
           kubectl apply -f k8s/mlflow.yaml 
           kubectl set image deployment/mlflow mlflow=ghcr.io/darakhasha/mlflow:${{ github.sha }}
           kubectl rollout restart deployment/mlflow
-          kubectl rollout status deployment/mlflow --timeout=180s
+          kubectl rollout status deployment/mlflow --timeout=400s
+          
 
       - name: Trigger Model Training Job
         run: |
