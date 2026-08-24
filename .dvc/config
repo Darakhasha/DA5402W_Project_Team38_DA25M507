@@ -3,3 +3,5 @@
 ['remote "minio-store"']
     url = s3://data-files
     endpointurl = http://127.0.0.1:9000
+    access_key_id = minioadmin
+    secret_access_key = minioadmin
