@@ -75,13 +75,14 @@ jobs:
       - name: Clean Up Existing State
         run: |
           kubectl delete deployment minio --ignore-not-found=true --wait=true
-          kubectl delete pod -l app=minio --force --grace-period=0 --ignore-not-found=true
-          python -c "import time; time.sleep(5)"
+          kubectl delete pvc -l app=minio --ignore-not-found=true
+          kubectl delete pvc --all --ignore-not-found=true
+          kubectl wait --for=delete pod -l app=minio --timeout=60s || true
           kubectl delete deployment airflow-postgres --ignore-not-found=true
           kubectl delete svc airflow-postgres --ignore-not-found=true
           kubectl delete deployment airflow --ignore-not-found=true
           kubectl delete deployment mlflow --ignore-not-found=true
-          echo "Cleaned up old workload resources."
+          echo "Cleaned up old workload resources and volumes."
 
       - name: Deploy MinIO Workload
         run: kubectl apply -f k8s/minio.yaml
